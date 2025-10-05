@@ -3,6 +3,7 @@ FROM python:3.9
 WORKDIR /app
 
 # Install system dependencies required by geospatial libraries
+# This step fixes the original GDAL dependency issue.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
@@ -21,6 +22,7 @@ ENV GDAL_DATA=/usr/share/gdal
 COPY requirements.txt .
 
 # Install dependencies
+# Note: The requirements.txt must contain 'numpy<2.0.0' to prevent the app crash.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
@@ -29,5 +31,7 @@ COPY . .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the application with Gunicorn (Using safer shell expansion method and exec for robustness)
-CMD ["sh", "-c", "echo \"PORT env var: $PORT\"; PORT=${PORT:-8000}; echo \"Starting Gunicorn on port $PORT\"; exec gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
+# Run the application with Gunicorn.
+# The `sh -c` wrapper is essential for proper variable expansion.
+# The echoes are diagnostic to confirm environment variables are set correctly.
+CMD ["sh", "-c", "echo \"PORT env var: $PORT\"; echo \"RAILWAY_STATIC_URL: $RAILWAY_STATIC_URL\"; echo \"RAILWAY_PUBLIC_DOMAIN: $RAILWAY_PUBLIC_DOMAIN\"; PORT=${PORT:-8000}; echo \"Starting Gunicorn on port $PORT\"; exec gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
