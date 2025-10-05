@@ -17,10 +17,18 @@ def register_routes(app):
     """
     @app.route('/')
     def index():
-        return send_from_directory('.', 'index.html')
+        # Return a simple health check JSON response for the root endpoint
+        # instead of trying to serve a non-existent index.html file.
+        return jsonify({
+            'status': 'API Running',
+            'message': 'Welcome to the Earthbenders API. Use /health for full check.',
+            'timestamp': time.time()
+        }), 200
 
     @app.route('/<path:path>')
     def serve_file(path):
+        # This is a fallback static file handler, but should ideally not be used
+        # in a pure API. It remains here for completeness.
         return send_from_directory('.', path)
         
     @app.route('/health')
@@ -30,4 +38,4 @@ def register_routes(app):
             'status': 'healthy',
             'timestamp': time.time(),
             'cors_origin': cors_origin
-        }), 200 
+        }), 200
