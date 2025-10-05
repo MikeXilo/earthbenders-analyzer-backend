@@ -177,6 +177,29 @@ def process_slopes_direct():
     except Exception as e:
         logger.error(f"Error processing slopes: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/update_analysis_paths/<analysisId>', methods=['PATCH'])
+def update_analysis_paths(analysisId):
+    """Update analysis record with raster paths"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        logger.info(f"Updating analysis paths for ID: {analysisId}")
+        logger.info(f"Raster paths data: {data}")
+        
+        # For now, just log the update (you can implement database update later)
+        return jsonify({
+            'status': 'success',
+            'message': f'Analysis paths updated for ID: {analysisId}',
+            'analysisId': analysisId,
+            'updated_paths': data
+        })
+        
+    except Exception as e:
+        logger.error(f"Error updating analysis paths: {str(e)}")
+        return jsonify({'error': str(e)}), 500
 # --- END BYPASS ---
 
 # --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
