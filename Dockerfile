@@ -1,6 +1,21 @@
-FROM python:3.9-slim
+FROM python:3.9
 
 WORKDIR /app
+
+# Install system dependencies required by geospatial libraries
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    build-essential \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    gdal-bin \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up environment variables for GDAL/Rasterio
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+ENV GDAL_DATA=/usr/share/gdal
 
 # Copy requirements first for better caching
 COPY requirements.txt .
