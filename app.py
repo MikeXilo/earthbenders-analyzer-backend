@@ -5,7 +5,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return jsonify({'message': 'Railway Flask App is running!', 'status': 'ok'})
+    return jsonify({'message': 'Railway Flask App is running!', 'status': 'ok', 'version': '2.0'})
 
 @app.route('/health')
 def health():
