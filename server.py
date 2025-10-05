@@ -109,6 +109,11 @@ from routes import register_all_routes
 register_all_routes(app)
 logger.info("All routes registered")
 
+# Add a simple test route to verify Flask is working
+@app.route('/test')
+def test_route():
+    return jsonify({'message': 'Flask app is working!', 'routes': ['/health', '/save_polygon', '/process_polygon']})
+
 # Remove duplicate health check endpoint since it's defined in routes/core.py
 @app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -116,4 +121,5 @@ def options_handler(path):
     return '', 204  # No content needed for OPTIONS response, status code 204
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=8000)
+    port = int(os.environ.get('PORT', 8000))
+    app.run(debug=True, host='0.0.0.0', port=port)
