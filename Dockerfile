@@ -18,5 +18,5 @@ EXPOSE 8000
 ENV PORT=8000
 ENV PYTHONUNBUFFERED=1
 
-# Run the application
-CMD ["python3", "index.py"]
+# Run the application with Gunicorn
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "index:app"]
