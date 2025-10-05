@@ -30,4 +30,4 @@ COPY . .
 ENV PYTHONUNBUFFERED=1
 
 # Run the application with Gunicorn (Using safer shell expansion method and exec for robustness)
-CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
+CMD ["sh", "-c", "echo \"PORT env var: $PORT\"; PORT=${PORT:-8000}; echo \"Starting Gunicorn on port $PORT\"; exec gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]

@@ -4,7 +4,7 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "gunicorn --bind 0.0.0.0:${PORT:-8000} server:app",
+    "startCommand": "sh -c \"PORT=${PORT:-8000} && exec gunicorn --bind 0.0.0.0:$PORT server:app\"",
     "healthcheckPath": "/health",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
