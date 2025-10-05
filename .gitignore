@@ -1,0 +1,25 @@
+# Exclude all SRTM data files
+data/srtm/
+data/polygon_sessions/
+data/basemaps/
+
+# Exclude logs
+logs.txt
+*.log
+
+# Exclude test files
+test_*.py
+
+# Exclude development files
+__pycache__/
+*.pyc
+.env
+.env.local
+
+# Exclude large data files
+*.hgt
+*.tif
+*.geojson
+
+# Exclude node_modules if any
+node_modules/
