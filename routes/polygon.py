@@ -5,6 +5,9 @@ import logging
 from flask import request, jsonify
 import json
 import os
+import shutil # Added for file copying
+from shapely.geometry import shape
+from shapely.geometry.polygon import Polygon # Explicitly import Polygon
 
 from services.srtm import get_srtm_data, process_srtm_files
 from services.terrain import calculate_centroid
@@ -43,75 +46,84 @@ def register_routes(app):
             
             # Save the GeoJSON file into a folder with the ID
             file_path = save_geojson(geojson_data, filename, SAVE_DIRECTORY, polygon_id)
-            logger.info(f"Polygon saved to: {file_path}")
             
-            # Return success message without processing SRTM
-            return jsonify({
-                'message': f'Polygon saved successfully as {filename}',
-                'file_path': file_path
-            }), 200
+            return jsonify({'message': f'Polygon saved successfully as {filename}', 'file_path': file_path})
         except Exception as e:
-            logger.exception("Error in save_polygon")
+            logger.error(f"Error saving polygon: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500
-            
+
+
     @app.route('/process_polygon', methods=['POST'])
     def process_polygon():
         try:
             data = request.json
+            if not data or 'data' not in data:
+                return jsonify({'error': 'Missing GeoJSON data'}), 400
+
+            geojson_data = data['data']
+            polygon_id = data.get('id', 'default_polygon')
+            filename = data.get('filename', 'polygon.geojson')
             
-            # Check if we have the new format with data and id
-            if isinstance(data, dict) and 'data' in data and 'id' in data:
-                geojson_data = data['data']
-                polygon_id = data['id']
-                logger.info(f"Processing polygon with ID: {polygon_id}")
-            else:
-                # Legacy format where the entire body is the GeoJSON
-                geojson_data = data
-                polygon_id = None
-                logger.warning("Processing polygon without ID - using legacy format")
+            # --- FIX: Robust GeoJSON Parsing and Boundary Extraction ---
             
-            # Create the polygon session folder path for processed outputs
-            if polygon_id:
-                polygon_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
-                os.makedirs(polygon_folder, exist_ok=True)
-                logger.info(f"Using polygon folder for processing outputs: {polygon_folder}")
-            else:
-                polygon_folder = None
-                logger.warning("No polygon ID provided, processed files will be saved in the current directory")
+            # 1. Convert the GeoJSON dictionary into a Shapely geometry object
+            try:
+                geom = shape(geojson_data)
+                if not isinstance(geom, Polygon):
+                     return jsonify({'error': 'GeoJSON data is not a valid Polygon feature.'}), 400
+            except Exception as e:
+                logger.error(f"Failed to parse GeoJSON into Shapely geometry: {str(e)}", exc_info=True)
+                return jsonify({'error': f'Invalid GeoJSON structure: {str(e)}'}), 400
+
+            # 2. Get the bounding box (bbox) from the Shapely object (minx, miny, maxx, maxy)
+            # This handles all coordinate structures internally and avoids the 'string index out of range' error.
+            min_lon, min_lat, max_lon, max_lat = geom.bounds
             
-            # Get SRTM data - the tiles are stored in SAVE_DIRECTORY/srtm
-            # but we pass polygon_folder for any temporary processing files
-            logger.info("Getting SRTM data from central SRTM repository")
-            srtm_files = get_srtm_data(geojson_data, output_folder=polygon_folder)
-            if not srtm_files:
-                return jsonify({'error': 'Failed to download SRTM data'}), 400
+            # -----------------------------------------------------------
+
+            # 3. Fetch SRTM data based on the bounding box
+            logger.info(f"Fetching SRTM data for bounds: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
+            srtm_data = get_srtm_data(min_lon, min_lat, max_lon, max_lat)
             
-            # Process SRTM data and save processed files in the polygon folder
-            logger.info(f"Processing SRTM data, outputs will be saved to: {polygon_folder}")
-            srtm_data = process_srtm_files(srtm_files, geojson_data, output_folder=polygon_folder)
-            if not srtm_data:
-                return jsonify({'error': 'Failed to process SRTM data'}), 500
+            if 'error' in srtm_data:
+                return jsonify(srtm_data), 500
+
+            # 4. Clip and process the SRTM file using the polygon geometry
+            processed_data = process_srtm_files(srtm_data['download_paths'], geojson_data, polygon_id)
             
-            # If we have a polygon ID, copy the clipped SRTM as the named output file
-            if polygon_id and 'clipped_srtm_path' in srtm_data:
-                try:
-                    # Create specific named SRTM file for this polygon
-                    srtm_file_path = os.path.join(polygon_folder, f"{polygon_id}_srtm.tif")
-                    
-                    # Copy the clipped SRTM to the named file
-                    import shutil
-                    shutil.copy2(srtm_data['clipped_srtm_path'], srtm_file_path)
-                    logger.info(f"Copied clipped SRTM data to: {srtm_file_path}")
-                    
-                    # Add the file path to the response
-                    srtm_data['srtm_file_path'] = srtm_file_path
-                except Exception as folder_error:
-                    logger.error(f"Error copying SRTM data for polygon {polygon_id}: {str(folder_error)}")
-                    # Continue processing even if file copy fails
+            if 'error' in processed_data:
+                return jsonify(processed_data), 500
             
-            return jsonify(srtm_data)
+            # 5. Get the final clipped SRTM file path
+            clipped_srtm_path = processed_data['clipped_srtm_path']
+
+            # 6. Save the final clipped SRTM data to the polygon session folder
+            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+            os.makedirs(polygon_session_folder, exist_ok=True)
+            srtm_file_path = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
+            
+            # Copy the clipped SRTM to the named file
+            shutil.copy2(clipped_srtm_path, srtm_file_path)
+            logger.info(f"Copied clipped SRTM data to: {srtm_file_path}")
+            
+            # Add the file path to the response
+            processed_data['srtm_file_path'] = srtm_file_path
+            
+            # Cleanup temporary file from processing
+            if os.path.exists(clipped_srtm_path):
+                 os.remove(clipped_srtm_path)
+                 logger.debug(f"Removed temp clipped file: {clipped_srtm_path}")
+
+
+            return jsonify({
+                'message': 'Polygon processed successfully. SRTM data clipped and saved.',
+                'polygon_id': polygon_id,
+                'srtm_file_path': srtm_file_path,
+                'bounds': [min_lon, min_lat, max_lon, max_lat]
+            })
+
         except Exception as e:
-            logger.error(f"Error processing polygon: {str(e)}")
+            logger.error(f"Error processing polygon: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500
             
     @app.route('/centroid', methods=['POST'])
@@ -122,6 +134,11 @@ def register_routes(app):
             if not points or len(points) < 3:
                 return jsonify({'error': 'Not enough points. Need at least 3 for a polygon.'}), 400
             
+            # The calculation function remains the same assuming it takes Shapely coordinates
+            # Note: The 'calculate_centroid' service function is assumed to correctly handle the 'points' input structure
+            # based on how it's used in the original application logic.
+            # However, for a GeoJSON Polygon feature, the input should ideally be the GeoJSON object itself.
+            # Keeping the old logic for now, but flagging that standard GeoJSON features are usually passed.
             centroid = calculate_centroid(points)
             if not centroid:
                 return jsonify({'error': 'Failed to calculate centroid'}), 500
@@ -129,4 +146,4 @@ def register_routes(app):
             return jsonify({'centroid': centroid})
         except Exception as e:
             logger.exception("Error in calculate_centroid")
-            return jsonify({'error': str(e)}), 500 
+            return jsonify({'error': str(e)}), 500
