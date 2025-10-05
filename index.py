@@ -7,7 +7,7 @@ CORS(app)
 
 @app.route('/')
 def home():
-    return jsonify({'message': 'Railway Flask App is running!', 'status': 'ok', 'version': '4.0'})
+    return jsonify({'message': 'Railway Flask App is running!', 'status': 'ok', 'version': '5.0', 'timestamp': '2025-01-05'})
 
 @app.route('/health')
 def health():
@@ -31,4 +31,6 @@ def save_polygon():
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8000))
+    print(f"Starting Flask app on port {port}")
+    print(f"Environment: {os.environ.get('RAILWAY_ENVIRONMENT', 'local')}")
     app.run(host='0.0.0.0', port=port, debug=False)
