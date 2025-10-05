@@ -114,10 +114,10 @@ logger.info("All routes registered")
 def test_route():
     return jsonify({'message': 'Flask app is working!', 'routes': ['/health', '/save_polygon', '/process_polygon']})
 
-# Remove duplicate health check endpoint since it's defined in routes/core.py
-@app.route('/', defaults={'path': ''}, methods=['OPTIONS'])
+# Handle OPTIONS requests for CORS
+@app.route('/', methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
-def options_handler(path):
+def options_handler(path=''):
     return '', 204  # No content needed for OPTIONS response, status code 204
 
 if __name__ == '__main__':
