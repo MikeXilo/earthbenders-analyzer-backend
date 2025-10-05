@@ -110,7 +110,13 @@ logger.info("Vector tile server initialized")
 from routes import register_all_routes
 register_all_routes(app)
 logger.info("All modular routes registered.")
-# --- END ROUTE REGISTRATION ---
+
+# --- DEBUG: PRINT ALL REGISTERED ROUTES ---
+logger.info("=== FLASK ROUTE MAP ===")
+for rule in app.url_map.iter_rules():
+    logger.info(f"Route: {rule.rule} | Methods: {rule.methods} | Endpoint: {rule.endpoint}")
+logger.info("=== END FLASK ROUTE MAP ===")
+# --- END DEBUG ---
 
 # --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
 # This explicit definition should force the Railway proxy to stop serving the ASCII art
