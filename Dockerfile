@@ -29,5 +29,5 @@ COPY . .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the application with Gunicorn (Railway will set PORT dynamically)
+# Run the application with Gunicorn (Using safer shell expansion method)
 CMD ["sh", "-c", "PORT=${PORT:-8000} && echo \"Starting Gunicorn on port $PORT\" && gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
