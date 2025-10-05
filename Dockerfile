@@ -29,5 +29,5 @@ COPY . .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 
-# Run the application with Gunicorn (Using safer shell expansion method)
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--timeout", "120", "--workers", "1", "--access-logfile", "-", "--error-logfile", "-", "server:app"]
+# Run the application with Gunicorn (Using safer shell expansion method and exec for robustness)
+CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
