@@ -112,6 +112,19 @@ register_all_routes(app)
 logger.info("All modular routes registered.")
 # --- END ROUTE REGISTRATION ---
 
+# --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
+# This explicit definition should force the Railway proxy to stop serving the ASCII art
+# by overriding the default Flask behavior for '/'.
+@app.route('/', methods=['GET'])
+def root_override():
+    return jsonify({
+        'status': 'Flask service running',
+        'message': 'API is active and serving routes.',
+        'version': '6.1',
+        'routes_loaded': True
+    })
+# --- END FIX ---
+
 # Add a simple test route to verify Flask is working
 @app.route('/test')
 def test_route():
