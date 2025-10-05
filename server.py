@@ -104,35 +104,13 @@ BASEMAPS_PATH = os.path.join(os.path.dirname(__file__), 'data', 'basemaps', 'por
 tile_server = TileServer(app)
 logger.info("Vector tile server initialized")
 
-# Import modules from our refactored code (This registers the real routes)
+# --- ROUTE REGISTRATION ---
+# Import and register all routes from the 'routes' folder.
+# This registers: /, /health, /save_polygon, /process_polygon, etc.
 from routes import register_all_routes
 register_all_routes(app)
-logger.info("All routes registered")
-
-# Add a root route to test basic connectivity (Fixes the ASCII art problem)
-@app.route('/')
-def root():
-    return jsonify({
-        'status': 'Flask service running',
-        'message': 'Railway Flask App is working!',
-        'version': '6.0',
-        'timestamp': '2025-01-05',
-        'routes': ['/health', '/save_polygon', '/test']
-    })
-
-# Add a direct save_polygon route for testing (Fallback/Diagnostic)
-@app.route('/save_polygon', methods=['POST'])
-def save_polygon_direct():
-    try:
-        data = request.json
-        return jsonify({
-            'status': 'success',
-            'message': 'Polygon data received and route confirmed',
-            'data_received': data is not None,
-            'timestamp': '2025-01-05'
-        })
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+logger.info("All modular routes registered.")
+# --- END ROUTE REGISTRATION ---
 
 # Add a simple test route to verify Flask is working
 @app.route('/test')
