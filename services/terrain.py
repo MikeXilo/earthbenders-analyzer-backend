@@ -606,7 +606,7 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
 
 def calculate_aspect(input_file_path, output_file_path, convention="azimuth", gradient_alg="Horn", zero_for_flat=False):
     """
-    Calculate aspect from a DEM raster using GDAL
+    Calculate aspect from a DEM raster using WhiteboxTools
     
     Args:
         input_file_path: Path to the input DEM file
@@ -619,38 +619,16 @@ def calculate_aspect(input_file_path, output_file_path, convention="azimuth", gr
         bool: True if successful, False otherwise
     """
     try:
-        import subprocess
-        import os
-        
-        # Set the working directory
-        working_dir = os.path.dirname(output_file_path)
+        # Set the working directory for WhiteboxTools
+        wbt.set_working_dir(os.path.dirname(output_file_path))
         
         logger.info(f"Calculating aspect from {input_file_path}...")
         
-        # Build the GDAL command
-        cmd = [
-            "gdal", "raster", "aspect",
-            input_file_path,
-            output_file_path,
-            "--overwrite"
-        ]
-        
-        # Add optional parameters
-        if convention:
-            cmd.extend(["--convention", convention])
-        if gradient_alg:
-            cmd.extend(["--gradient-alg", gradient_alg])
-        if zero_for_flat:
-            cmd.append("--zero-for-flat")
-        
-        logger.info(f"Running GDAL command: {' '.join(cmd)}")
-        
-        # Run the command
-        result = subprocess.run(cmd, capture_output=True, text=True, cwd=working_dir)
-        
-        if result.returncode != 0:
-            logger.error(f"GDAL aspect calculation failed: {result.stderr}")
-            return False
+        # Use WhiteboxTools aspect function
+        wbt.aspect(
+            dem=str(input_file_path), 
+            output=str(output_file_path)
+        )
         
         if not os.path.exists(output_file_path):
             logger.error(f"Failed to calculate aspect - output file not created")
