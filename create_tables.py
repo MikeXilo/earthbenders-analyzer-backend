@@ -41,20 +41,20 @@ def create_tables():
         print("✅ Created polygons table")
         
         # Create analyses table
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS analyses (
-                id VARCHAR(255) PRIMARY KEY,
-                polygon_id VARCHAR(255) UNIQUE NOT NULL,
-                elevation JSONB,
-                slope JSONB,
-                aspect JSONB,
-                contours JSONB,
-                statistics JSONB,
-                created_at TIMESTAMP DEFAULT NOW(),
-                updated_at TIMESTAMP DEFAULT NOW(),
-                FOREIGN KEY (polygon_id) REFERENCES polygons(id) ON DELETE CASCADE
-            );
-        """)
+              cursor.execute("""
+                  CREATE TABLE IF NOT EXISTS analyses (
+                      id VARCHAR(255) PRIMARY KEY,
+                      polygon_id VARCHAR(255) UNIQUE NOT NULL,
+                      srtm_path TEXT,
+                      slope_path TEXT,
+                      aspect_path TEXT,
+                      contours_path TEXT,
+                      statistics JSONB,
+                      created_at TIMESTAMP DEFAULT NOW(),
+                      updated_at TIMESTAMP DEFAULT NOW(),
+                      FOREIGN KEY (polygon_id) REFERENCES polygons(id) ON DELETE CASCADE
+                  );
+              """)
         print("✅ Created analyses table")
         
         # Create file_storage table

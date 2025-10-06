@@ -11,9 +11,10 @@ A Flask-based geospatial analysis backend that processes polygon data, generates
 - **User management** - Ready for future authentication
 
 ### **File Storage (Railway Volumes)**
+- **SRTM Cache** - Reusable raw SRTM tiles in `/app/data/srtms/`
+- **Session Folders** - User-specific processed data in `/app/data/polygon_sessions/{id}/`
 - **GeoJSON files** - User-drawn polygons
-- **SRTM data** - Clipped terrain elevation data
-- **Processed outputs** - Slope, contours, analysis results
+- **Processed outputs** - Clipped SRTM, slope, contours, analysis results
 - **Future Azure migration** - Easy transition path
 
 ## 🚀 Deployment
@@ -35,10 +36,11 @@ Tables are created automatically on startup via `create_tables.py`:
 
 ### **Current Status: Production Ready ✅**
 - **Database Integration:** Neon PostgreSQL fully operational
-- **File Storage:** Railway volumes working correctly
-- **SRTM Processing:** Real-world terrain data processing functional
+- **File Storage:** Railway volumes with optimized SRTM cache structure
+- **SRTM Processing:** Optimized workflow - check cache → download if needed → clip to polygon
 - **API Endpoints:** All core operations tested and working
 - **Error Handling:** Robust error management implemented
+- **Performance:** SRTM tiles cached for reuse across sessions
 
 ## 📊 API Endpoints
 
@@ -107,7 +109,8 @@ Process SRTM data for a polygon and generate terrain analysis.
   "file_metadata_status": {
     "status": "success",
     "message": "File metadata saved"
-  }
+  },
+  "srtm_cache_status": "tiles_reused_from_cache"
 }
 ```
 
@@ -196,10 +199,10 @@ CREATE TABLE polygons (
 CREATE TABLE analyses (
     id VARCHAR(255) PRIMARY KEY,
     polygon_id VARCHAR(255) UNIQUE NOT NULL,
-    elevation JSONB,
-    slope JSONB,
-    aspect JSONB,
-    contours JSONB,
+    srtm_path TEXT,
+    slope_path TEXT,
+    aspect_path TEXT,
+    contours_path TEXT,
     statistics JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
@@ -281,7 +284,7 @@ backend/
 ├── Procfile                 # Alternative start command
 ├── services/
 │   ├── database.py          # Database service layer
-│   ├── srtm.py             # SRTM data processing
+│   ├── srtm.py             # SRTM data processing (optimized cache workflow)
 │   ├── terrain.py          # Terrain analysis
 │   └── water_accumulation.py # Water flow analysis
 ├── routes/
@@ -291,8 +294,13 @@ backend/
 │   ├── config.py           # Configuration settings
 │   └── file_io.py          # File I/O operations
 └── data/                   # File storage directory
-    ├── polygon_sessions/   # User polygon files
-    ├── srtm/               # SRTM elevation data
+    ├── srtms/              # SRTM cache (reusable raw tiles)
+    ├── polygon_sessions/   # User-specific processed data
+    │   └── {polygon_id}/   # Session folders
+    │       ├── polygon.geojson
+    │       ├── {id}_srtm.tif
+    │       ├── {id}_slope.tif
+    │       └── {id}_contours.geojson
     └── basemaps/           # Base map data
 ```
 
@@ -300,14 +308,18 @@ backend/
 
 1. **User draws polygon** → Frontend sends GeoJSON to `/save_polygon`
 2. **Backend saves metadata** → Stores in Neon database
-3. **Backend saves file** → Stores GeoJSON in Railway volume
+3. **Backend saves file** → Stores GeoJSON in session folder
 4. **User requests processing** → Calls `/process_polygon`
-5. **Backend fetches SRTM** → Downloads elevation data
-6. **Backend processes data** → Clips and analyzes terrain
-7. **Backend saves results** → Stores files and metadata
-8. **Database tracks status** → Updates polygon status and results
+5. **Backend checks SRTM cache** → Looks in `/app/data/srtms/` for existing tiles
+6. **Backend downloads if needed** → Only downloads missing SRTM tiles
+7. **Backend processes data** → Clips SRTM to polygon and analyzes terrain
+8. **Backend saves results** → Stores processed files in session folder
+9. **Database tracks status** → Updates polygon status and results
 
 ### **Recent Fixes & Improvements**
+- **Optimized SRTM Workflow:** Check cache → download if needed → clip to polygon
+- **File Structure Optimization:** SRTM cache in `/app/data/srtms/`, processed data in session folders
+- **Performance Enhancement:** SRTM tiles cached for reuse across sessions
 - **GeoJSON Parsing:** Fixed Feature object handling in `shapely.geometry.shape()`
 - **SRTM Function Calls:** Corrected parameter passing to `get_srtm_data()`
 - **Database Health Check:** Improved error handling and connection management
@@ -360,6 +372,32 @@ For issues or questions:
 - **Railway URL:** https://earthbenders-analyzer-backend-production.up.railway.app/
 - **Database:** Neon PostgreSQL (earthbenders-analyzer)
 
+## 🔧 Railway CLI Commands
+
+### **SSH Access**
+```bash
+# Connect to Railway backend container
+railway ssh --project=4befc57d-874b-4b08-94f4-0dbe29106141 --environment=33d43056-76dd-45c7-95e9-2c37c4641157 --service=b96de10d-ddea-44db-ba1f-31e253ae1f79
+
+# Alternative using npx
+npx @railway/cli ssh --project=4befc57d-874b-4b08-94f4-0dbe29106141 --environment=33d43056-76dd-45c7-95e9-2c37c4641157 --service=b96de10d-ddea-44db-ba1f-31e253ae1f79
+```
+
+### **Volume Inspection**
+```bash
+# List all files in the data directory
+ls -la /app/data
+
+# Check SRTM cache directory
+ls -la /app/data/srtms/
+
+# Check polygon sessions
+ls -la /app/data/polygon_sessions/
+
+# Check specific session folder
+ls -la /app/data/polygon_sessions/{polygon_id}/
+```
+
 ## 🧪 Test Results
 
 ### **Latest Integration Test Results**
@@ -388,7 +426,8 @@ For issues or questions:
 
 ---
 
-**Version:** 6.1  
+**Version:** 6.2  
 **Last Updated:** January 2025  
 **Status:** Production Ready ✅  
-**All Tests Passing:** ✅
+**All Tests Passing:** ✅  
+**Optimized SRTM Workflow:** ✅

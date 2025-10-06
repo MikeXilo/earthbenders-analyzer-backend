@@ -140,14 +140,22 @@ class DatabaseService:
             
             # Insert or update analysis results
             cursor.execute("""
-                INSERT INTO analyses (id, polygon_id, statistics, created_at, updated_at)
-                VALUES (%s, %s, %s, NOW(), NOW())
+                INSERT INTO analyses (id, polygon_id, srtm_path, slope_path, aspect_path, contours_path, statistics, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (polygon_id) DO UPDATE SET
+                    srtm_path = EXCLUDED.srtm_path,
+                    slope_path = EXCLUDED.slope_path,
+                    aspect_path = EXCLUDED.aspect_path,
+                    contours_path = EXCLUDED.contours_path,
                     statistics = EXCLUDED.statistics,
                     updated_at = NOW()
             """, (
                 f"analysis_{polygon_id}",
                 polygon_id,
+                analysis_data.get('srtm_path'),
+                analysis_data.get('slope_path'),
+                analysis_data.get('aspect_path'),
+                analysis_data.get('contours_path'),
                 json.dumps(analysis_data)
             ))
             

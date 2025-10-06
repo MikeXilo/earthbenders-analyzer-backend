@@ -47,17 +47,9 @@ def register_routes(app):
                     input_file = clipped_srtm
                     logger.info(f"Using clipped SRTM file from polygon session: {input_file}")
                 else:
-                    # Check in the srtms directory as fallback
-                    srtms_dir = SAVE_DIRECTORY / "srtms"
-                    srtms_dir.mkdir(exist_ok=True)  # Ensure srtms directory exists
-                    data_input_file = srtms_dir / "clipped_srtm.tif"
-                    
-                    if data_input_file.exists():
-                        input_file = data_input_file
-                        logger.info(f"Using clipped SRTM file from data directory: {input_file}")
-                    else:
-                        # If no SRTM file found, return error
-                        return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+                # SRTM cache directory should only contain raw tiles, not clipped files
+                # If no SRTM file found, return error
+                return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
             
             # Output file in the polygon session folder
             slope_file = os.path.join(polygon_session_folder, f"{polygon_id}_slope.tif")
@@ -134,16 +126,9 @@ def register_routes(app):
             
             # If no SRTM file in the session folder, check srtms directory as fallback
             if not input_file:
-                srtms_dir = SAVE_DIRECTORY / "srtms"
-                srtms_dir.mkdir(exist_ok=True)  # Ensure srtms directory exists
-                data_input_file = srtms_dir / "clipped_srtm.tif"
-                
-                if data_input_file.exists():
-                    input_file = data_input_file
-                    logger.info(f"Using clipped SRTM file from data directory: {input_file}")
-                else:
-                    # If no SRTM file found, return error
-                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+                # SRTM cache directory should only contain raw tiles, not clipped files
+                # If no SRTM file found, return error
+                return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
             
             # Output file in the polygon session folder
             contour_file = os.path.join(polygon_session_folder, f"{polygon_id}_contours.geojson")

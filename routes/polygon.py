@@ -165,12 +165,8 @@ def register_routes(app):
             shutil.copy2(clipped_srtm_path, srtm_file_path)
             logger.info(f"Copied clipped SRTM data to: {srtm_file_path}")
             
-            # Also save a global fallback file in the srtms directory
-            srtms_dir = os.path.join(SAVE_DIRECTORY, "srtms")
-            os.makedirs(srtms_dir, exist_ok=True)
-            global_srtm_path = os.path.join(srtms_dir, "clipped_srtm.tif")
-            shutil.copy2(clipped_srtm_path, global_srtm_path)
-            logger.info(f"Saved global SRTM fallback to: {global_srtm_path}")
+            # Note: SRTM cache directory should only contain raw, unprocessed SRTM tiles
+            # Clipped files belong in polygon session folders, not in the cache
             
             # Add the file path to the response
             processed_data['srtm_file_path'] = srtm_file_path
@@ -198,11 +194,22 @@ def register_routes(app):
                  os.remove(clipped_srtm_path)
                  logger.debug(f"Removed temp clipped file: {clipped_srtm_path}")
 
+            # Return the processed SRTM data in the format expected by the frontend
             return jsonify({
                 'message': 'Polygon processed successfully. SRTM data clipped and saved.',
                 'polygon_id': polygon_id,
                 'srtm_file_path': srtm_file_path,
-                'bounds': [min_lon, min_lat, max_lon, max_lat],
+                'image': processed_data.get('image', ''),
+                'bounds': {
+                    'west': min_lon,
+                    'east': max_lon,
+                    'north': max_lat,
+                    'south': min_lat
+                },
+                'min_height': processed_data.get('min_height', 0),
+                'max_height': processed_data.get('max_height', 0),
+                'width': processed_data.get('width', 0),
+                'height': processed_data.get('height', 0),
                 'database_status': 'saved',
                 'file_metadata_status': srtm_file_result
             })
