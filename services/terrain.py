@@ -129,7 +129,7 @@ def visualize_slope(slope_file_path, polygon_data=None):
         # Upscale the image for better quality (4x resolution for much sharper images)
         original_size = img.size
         upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
         
         buffered = io.BytesIO()
         img_upscaled.save(buffered, format="PNG", optimize=True)
@@ -411,7 +411,7 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         # Upscale the image for better quality (4x resolution for much sharper images)
         original_size = img.size
         upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
         
         buffered = io.BytesIO()
         img_upscaled.save(buffered, format="PNG", optimize=True)
@@ -599,7 +599,7 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
         # Upscale the image for better quality (4x resolution for much sharper images)
         original_size = img.size
         upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
         
         buffered = io.BytesIO()
         img_upscaled.save(buffered, format="PNG", optimize=True)
@@ -824,7 +824,7 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
         # Upscale the image for better quality (4x resolution for much sharper images)
         original_size = img.size
         upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
         
         buffered = io.BytesIO()
         img_upscaled.save(buffered, format="PNG", optimize=True)
@@ -952,7 +952,7 @@ def visualize_drainage_network(drainage_file_path, polygon_data=None):
         # Upscale the image for better quality (4x resolution for much sharper images)
         original_size = img.size
         upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
         
         buffered = io.BytesIO()
         img_upscaled.save(buffered, format="PNG", optimize=True)
