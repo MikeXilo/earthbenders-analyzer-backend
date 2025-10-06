@@ -456,6 +456,344 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         logger.error(f"Error visualizing geomorphons: {str(e)}", exc_info=True)
         return None
 
+def calculate_hypsometrically_tinted_hillshade(input_file_path, output_file_path, altitude=45.0, hs_weight=0.5, brightness=0.5, atmospheric=0.0, palette="atlas", zfactor=None):
+    """
+    Calculate hypsometrically tinted hillshade from a DEM raster using WhiteboxTools
+    
+    Args:
+        input_file_path: Path to the input DEM file
+        output_file_path: Path to the output hillshade file
+        altitude: Illumination source altitude in degrees (0-90)
+        hs_weight: Weight given to hillshade relative to relief (0.0-1.0)
+        brightness: Brightness factor (0.0-1.0)
+        atmospheric: Atmospheric effects weight (0.0-1.0)
+        palette: Color palette options ('atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridis', 'gn_yl', 'pi_y_g', 'bl_yl_rd', 'deep')
+        zfactor: Optional multiplier for when vertical and horizontal units are not the same
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Set the working directory for WhiteboxTools
+        wbt.set_working_dir(os.path.dirname(output_file_path))
+        
+        logger.info(f"Calculating hypsometrically tinted hillshade from {input_file_path}...")
+        wbt.hypsometrically_tinted_hillshade(
+            dem=str(input_file_path), 
+            output=str(output_file_path),
+            altitude=altitude,
+            hs_weight=hs_weight,
+            brightness=brightness,
+            atmospheric=atmospheric,
+            palette=palette,
+            zfactor=zfactor
+        )
+        
+        if not os.path.exists(output_file_path):
+            logger.error(f"Failed to calculate hillshade - output file not created")
+            return False
+            
+        logger.info(f"Hypsometrically tinted hillshade calculation complete: {output_file_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Error calculating hypsometrically tinted hillshade: {str(e)}", exc_info=True)
+        return False
+
+def visualize_hillshade(hillshade_file_path, polygon_data=None):
+    """
+    Visualize hillshade data as a colored image with optional polygon masking
+    
+    Args:
+        hillshade_file_path: Path to the hillshade raster file
+        polygon_data: Optional GeoJSON polygon data for masking
+        
+    Returns:
+        dict: Visualization data including base64 image and metadata
+    """
+    try:
+        # Read the hillshade raster
+        with rasterio.open(hillshade_file_path) as src:
+            hillshade_data = src.read(1)
+            bounds = src.bounds
+            profile = src.profile
+        
+        # Mask using the polygon if available
+        if polygon_data:
+            try:
+                from shapely.geometry import shape
+                from rasterio.mask import mask
+                
+                # Convert GeoJSON to shapely geometry
+                polygon = shape(polygon_data['geometry'])
+                clipping_polygon = polygon.buffer(0.0001)  # Small buffer to avoid geometry issues
+                
+                # Create a rasterized mask of the polygon
+                with rasterio.open(hillshade_file_path) as src:
+                    # Mask using the polygon - crop=False to keep original extent
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    masked_hillshade = masked_data[0]  # Extract the data array
+                
+                # Replace the original hillshade data with the masked version
+                hillshade_data = masked_hillshade
+                
+                logger.info(f"Successfully masked hillshade to polygon shape")
+            except Exception as e:
+                logger.error(f"Error masking hillshade with polygon: {str(e)}")
+                # If masking fails, continue with the original data
+        
+        # For hillshade, we can use the RGB data directly since it's already a 24-bit RGB image
+        # We need to handle the case where the data might be in different formats
+        if len(hillshade_data.shape) == 2:
+            # Single band - convert to RGB
+            rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
+            # Use the hillshade data as grayscale
+            rgba[:,:,0] = hillshade_data  # R
+            rgba[:,:,1] = hillshade_data  # G  
+            rgba[:,:,2] = hillshade_data  # B
+            rgba[:,:,3] = 255  # Alpha
+        else:
+            # Multi-band RGB data
+            if hillshade_data.shape[0] >= 3:
+                rgba = np.zeros((hillshade_data.shape[1], hillshade_data.shape[2], 4), dtype=np.uint8)
+                rgba[:,:,0] = hillshade_data[0]  # R
+                rgba[:,:,1] = hillshade_data[1]  # G
+                rgba[:,:,2] = hillshade_data[2]  # B
+                rgba[:,:,3] = 255  # Alpha
+            else:
+                # Fallback to grayscale
+                rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
+                rgba[:,:,0] = hillshade_data
+                rgba[:,:,1] = hillshade_data
+                rgba[:,:,2] = hillshade_data
+                rgba[:,:,3] = 255
+        
+        # Set alpha channel - transparent for NaN values
+        rgba[np.isnan(hillshade_data), 3] = 0
+        
+        # Convert to PIL Image and upscale for higher resolution
+        img = Image.fromarray(rgba)
+        
+        # Upscale the image for better quality (4x resolution for much sharper images)
+        original_size = img.size
+        upscaled_size = (original_size[0] * 4, original_size[1] * 4)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        
+        buffered = io.BytesIO()
+        img_upscaled.save(buffered, format="PNG", optimize=True)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Calculate min/max for display
+        valid_data = hillshade_data[~np.isnan(hillshade_data)]
+        hillshade_min = np.min(valid_data) if valid_data.size > 0 else 0
+        hillshade_max = np.max(valid_data) if valid_data.size > 0 else 255
+        
+        return {
+            'image': img_str,
+            'min_hillshade': float(hillshade_min),
+            'max_hillshade': float(hillshade_max),
+            'width': upscaled_size[0],  # Use upscaled dimensions
+            'height': upscaled_size[1],  # Use upscaled dimensions
+            'bounds': {
+                'north': bounds.top,
+                'south': bounds.bottom,
+                'east': bounds.right,
+                'west': bounds.left
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error visualizing hillshade: {str(e)}", exc_info=True)
+        return None
+
+def calculate_aspect(input_file_path, output_file_path, convention="azimuth", gradient_alg="Horn", zero_for_flat=False):
+    """
+    Calculate aspect from a DEM raster using GDAL
+    
+    Args:
+        input_file_path: Path to the input DEM file
+        output_file_path: Path to the output aspect file
+        convention: Convention for output angles ('azimuth' or 'trigonometric-angle')
+        gradient_alg: Algorithm used to compute terrain gradient ('Horn' or 'ZevenbergenThorne')
+        zero_for_flat: Whether to output zero for flat areas
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        import subprocess
+        import os
+        
+        # Set the working directory
+        working_dir = os.path.dirname(output_file_path)
+        
+        logger.info(f"Calculating aspect from {input_file_path}...")
+        
+        # Build the GDAL command
+        cmd = [
+            "gdal", "raster", "aspect",
+            input_file_path,
+            output_file_path,
+            "--overwrite"
+        ]
+        
+        # Add optional parameters
+        if convention:
+            cmd.extend(["--convention", convention])
+        if gradient_alg:
+            cmd.extend(["--gradient-alg", gradient_alg])
+        if zero_for_flat:
+            cmd.append("--zero-for-flat")
+        
+        logger.info(f"Running GDAL command: {' '.join(cmd)}")
+        
+        # Run the command
+        result = subprocess.run(cmd, capture_output=True, text=True, cwd=working_dir)
+        
+        if result.returncode != 0:
+            logger.error(f"GDAL aspect calculation failed: {result.stderr}")
+            return False
+        
+        if not os.path.exists(output_file_path):
+            logger.error(f"Failed to calculate aspect - output file not created")
+            return False
+            
+        logger.info(f"Aspect calculation complete: {output_file_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error calculating aspect: {str(e)}", exc_info=True)
+        return False
+
+def visualize_aspect(aspect_file_path, polygon_data=None):
+    """
+    Visualize aspect data as a colored image with optional polygon masking
+    
+    Args:
+        aspect_file_path: Path to the aspect raster file
+        polygon_data: Optional GeoJSON polygon data for masking
+        
+    Returns:
+        dict: Visualization data including base64 image and metadata
+    """
+    try:
+        # Read the aspect raster
+        with rasterio.open(aspect_file_path) as src:
+            aspect_data = src.read(1)
+            bounds = src.bounds
+            profile = src.profile
+        
+        # Mask using the polygon if available
+        if polygon_data:
+            try:
+                from shapely.geometry import shape
+                from rasterio.mask import mask
+                
+                # Convert GeoJSON to shapely geometry
+                polygon = shape(polygon_data['geometry'])
+                clipping_polygon = polygon.buffer(0.0001)  # Small buffer to avoid geometry issues
+                
+                # Create a rasterized mask of the polygon
+                with rasterio.open(aspect_file_path) as src:
+                    # Mask using the polygon - crop=False to keep original extent
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    masked_aspect = masked_data[0]  # Extract the data array
+                
+                # Replace the original aspect data with the masked version
+                aspect_data = masked_aspect
+                
+                logger.info(f"Successfully masked aspect to polygon shape")
+            except Exception as e:
+                logger.error(f"Error masking aspect with polygon: {str(e)}")
+                # If masking fails, continue with the original data
+        
+        # Create aspect color mapping using QGIS symbology colors
+        # Based on the provided QML file with 8 directional categories
+        aspect_colors = {
+            'flat': [176, 176, 176],      # Flat (-1) - #b0b0b0
+            'north': [255, 0, 0],          # North (0-22.5) - #ff0000
+            'northeast': [255, 166, 0],    # Northeast (22.5-67.5) - #ffa600
+            'east': [255, 255, 0],         # East (67.5-112.5) - #ffff00
+            'southeast': [0, 255, 0],      # Southeast (112.5-157.5) - #00ff00
+            'south': [0, 255, 255],        # South (157.5-202.5) - #00ffff
+            'southwest': [0, 166, 255],    # Southwest (202.5-247.5) - #00a6ff
+            'west': [0, 0, 255],           # West (247.5-292.5) - #0000ff
+            'northwest': [255, 0, 255]     # Northwest (292.5-337.5) - #ff00ff
+        }
+        
+        rgba = np.zeros((aspect_data.shape[0], aspect_data.shape[1], 4), dtype=np.uint8)
+        
+        # Initialize alpha to transparent everywhere
+        rgba[:,:,3] = 0
+        
+        # Apply colors based on aspect direction
+        for i in range(aspect_data.shape[0]):
+            for j in range(aspect_data.shape[1]):
+                if np.isnan(aspect_data[i, j]):
+                    continue
+                    
+                aspect_val = aspect_data[i, j]
+                
+                # Determine direction and assign color
+                if aspect_val < 0 or aspect_val == -9999:  # Flat areas
+                    color = aspect_colors['flat']
+                elif aspect_val <= 22.5 or aspect_val >= 337.5:  # North
+                    color = aspect_colors['north']
+                elif aspect_val <= 67.5:  # Northeast
+                    color = aspect_colors['northeast']
+                elif aspect_val <= 112.5:  # East
+                    color = aspect_colors['east']
+                elif aspect_val <= 157.5:  # Southeast
+                    color = aspect_colors['southeast']
+                elif aspect_val <= 202.5:  # South
+                    color = aspect_colors['south']
+                elif aspect_val <= 247.5:  # Southwest
+                    color = aspect_colors['southwest']
+                elif aspect_val <= 292.5:  # West
+                    color = aspect_colors['west']
+                else:  # Northwest
+                    color = aspect_colors['northwest']
+                
+                rgba[i, j, 0] = color[0]  # R
+                rgba[i, j, 1] = color[1]  # G
+                rgba[i, j, 2] = color[2]  # B
+                rgba[i, j, 3] = 255       # Alpha
+        
+        # Set alpha channel - transparent for NaN values
+        rgba[np.isnan(aspect_data), 3] = 0
+        
+        # Convert to PIL Image and upscale for higher resolution
+        img = Image.fromarray(rgba)
+        
+        # Upscale the image for better quality (4x resolution for much sharper images)
+        original_size = img.size
+        upscaled_size = (original_size[0] * 4, original_size[1] * 4)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        
+        buffered = io.BytesIO()
+        img_upscaled.save(buffered, format="PNG", optimize=True)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Calculate min/max for display
+        valid_data = aspect_data[~np.isnan(aspect_data)]
+        aspect_min = np.min(valid_data) if valid_data.size > 0 else 0
+        aspect_max = np.max(valid_data) if valid_data.size > 0 else 360
+        
+        return {
+            'image': img_str,
+            'min_aspect': float(aspect_min),
+            'max_aspect': float(aspect_max),
+            'width': upscaled_size[0],  # Use upscaled dimensions
+            'height': upscaled_size[1],  # Use upscaled dimensions
+            'bounds': {
+                'north': bounds.top,
+                'south': bounds.bottom,
+                'east': bounds.right,
+                'west': bounds.left
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error visualizing aspect: {str(e)}", exc_info=True)
+        return None
+
 def calculate_centroid(points):
     """
     Calculate the centroid of a set of points forming a polygon
