@@ -916,11 +916,15 @@ def visualize_drainage_network(drainage_file_path, polygon_data=None):
                 # Normalize to 0-1
                 normalized = (log_data - log_min) / (log_max - log_min)
                 
+                # Create a normalized array for the full raster
+                normalized_full = np.zeros_like(drainage_data, dtype=np.float32)
+                normalized_full[valid_mask] = normalized
+                
                 # Apply blue color scheme (light blue to dark blue)
                 for i in range(drainage_data.shape[0]):
                     for j in range(drainage_data.shape[1]):
                         if valid_mask[i, j]:
-                            val = normalized[valid_mask[i, j]]
+                            val = normalized_full[i, j]
                             # Blue color scheme: light blue (low) to dark blue (high)
                             rgba[i, j, 0] = int(255 * (1 - val * 0.7))  # R: 255 to 77
                             rgba[i, j, 1] = int(255 * (1 - val * 0.5))  # G: 255 to 128
