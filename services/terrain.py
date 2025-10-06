@@ -664,12 +664,7 @@ def calculate_drainage_network(input_file_path, output_file_path):
         # Step 2: Calculate D8 flow accumulation
         wbt.d8_flow_accumulation(
             dem=str(filled_dem_path), 
-            output=str(output_file_path),
-            out_type="cells",  # Output as cell count
-            log=False,  # No logarithmic scaling
-            clip=False,  # Don't clip to watershed
-            esri_pntr=False,  # Use standard D8 pointer
-            pntr=False  # Don't output flow direction
+            output=str(output_file_path)
         )
         
         # Clean up intermediate file
