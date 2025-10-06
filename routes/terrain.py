@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from services.terrain import calculate_slopes, visualize_slope, generate_contours
+from services.terrain import calculate_slopes, visualize_slope, generate_contours, calculate_geomorphons, visualize_geomorphons
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import get_most_recent_polygon
 
@@ -165,4 +165,88 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error in generate_contours: {str(e)}", exc_info=True)
             logger.error("============= CONTOUR GENERATION FAILED =============")
+            return jsonify({'error': str(e)}), 500
+    
+    @app.route('/process_geomorphons', methods=['POST'])
+    def process_geomorphons():
+        try:
+            logger.info("🔍 ============ GEOMORPHONS PROCESSING STARTED ============")
+            data = request.json
+            logger.info(f"🔍 Received geomorphons request data: {json.dumps(data, indent=2)}")
+            
+            if 'id' not in data:
+                logger.error("❌ Missing polygon ID parameter")
+                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                
+            polygon_id = data['id']
+            logger.info(f"🔍 Processing geomorphons for polygon ID: {polygon_id}")
+            
+            # Get geomorphons parameters (optional with defaults)
+            search = data.get('search', 50)  # Default search distance
+            threshold = data.get('threshold', 0.0)  # Default flatness threshold
+            forms = data.get('forms', True)  # Default to common landforms
+            
+            logger.info(f"🔍 Geomorphons parameters - search: {search}, threshold: {threshold}, forms: {forms}")
+            
+            # Construct the path to the polygon session folder
+            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+            logger.info(f"🔍 Looking for polygon session folder: {polygon_session_folder}")
+            
+            if not os.path.exists(polygon_session_folder):
+                logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
+                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+            
+            logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
+            
+            # Look for the SRTM data in the polygon session folder
+            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
+            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            
+            if os.path.exists(srtm_file):
+                input_file = srtm_file
+                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
+            else:
+                logger.info(f"❌ SRTM file not found: {srtm_file}")
+                # If no SRTM file in the session folder, look for clipped_srtm.tif
+                clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
+                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
+                
+                if os.path.exists(clipped_srtm):
+                    input_file = clipped_srtm
+                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
+                else:
+                    logger.error("❌ No SRTM data found in polygon session folder")
+                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+            
+            # Output file in the polygon session folder
+            geomorphons_file = os.path.join(polygon_session_folder, f"{polygon_id}_geomorphons.tif")
+            
+            # Calculate geomorphons
+            success = calculate_geomorphons(input_file, geomorphons_file, search, threshold, forms)
+            if not success:
+                return jsonify({'error': 'Failed to calculate geomorphons'}), 500
+            
+            # Load the polygon data
+            polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
+            polygon_data = None
+            if os.path.exists(polygon_file):
+                try:
+                    with open(polygon_file, 'r') as f:
+                        polygon_data = json.load(f)
+                        logger.info(f"Loaded polygon data for masking from: {polygon_file}")
+                except Exception as e:
+                    logger.error(f"Error loading polygon data: {str(e)}")
+                    # Continue without polygon masking
+            
+            # Visualize the geomorphons data
+            geomorphons_viz = visualize_geomorphons(geomorphons_file, polygon_data)
+            if not geomorphons_viz:
+                return jsonify({'error': 'Failed to visualize geomorphons data'}), 500
+            
+            # Add the file paths to the response
+            geomorphons_viz['geomorphons_file'] = geomorphons_file
+                
+            return jsonify(geomorphons_viz)
+        except Exception as e:
+            logger.error(f"Error processing geomorphons: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500 
