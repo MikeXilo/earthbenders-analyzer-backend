@@ -249,6 +249,37 @@ def database_health():
             'status': 'error',
             'message': str(e)
         }), 500
+
+@app.route('/create-tables', methods=['POST'])
+def create_tables_endpoint():
+    """Create database tables"""
+    try:
+        import subprocess
+        import os
+        
+        # Run the create_tables.py script
+        result = subprocess.run(['python3', 'create_tables.py'], 
+                               capture_output=True, text=True, cwd='/app')
+        
+        if result.returncode == 0:
+            return jsonify({
+                'status': 'success',
+                'message': 'Tables created successfully',
+                'output': result.stdout
+            })
+        else:
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to create tables',
+                'error': result.stderr
+            }), 500
+            
+    except Exception as e:
+        logger.error(f"Table creation failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 # --- END BYPASS ---
 
 # --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
