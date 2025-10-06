@@ -8,13 +8,18 @@ import os
 import shutil # Added for file copying
 from shapely.geometry import shape
 from shapely.geometry.polygon import Polygon # Explicitly import Polygon
+from datetime import datetime
 
 from services.srtm import get_srtm_data, process_srtm_files
 from services.terrain import calculate_centroid
+from services.database import DatabaseService  # New import
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import save_geojson
 
 logger = logging.getLogger(__name__)
+
+# Initialize database service
+db_service = DatabaseService()
 
 def register_routes(app):
     """
@@ -47,7 +52,44 @@ def register_routes(app):
             # Save the GeoJSON file into a folder with the ID
             file_path = save_geojson(geojson_data, filename, SAVE_DIRECTORY, polygon_id)
             
-            return jsonify({'message': f'Polygon saved successfully as {filename}', 'file_path': file_path})
+            # Extract bounds for database
+            try:
+                geom = shape(geojson_data)
+                min_lon, min_lat, max_lon, max_lat = geom.bounds
+                bounds = {
+                    'minLon': min_lon,
+                    'minLat': min_lat,
+                    'maxLon': max_lon,
+                    'maxLat': max_lat
+                }
+            except Exception as e:
+                logger.warning(f"Could not extract bounds: {str(e)}")
+                bounds = None
+            
+            # Save metadata to database
+            db_result = db_service.save_polygon_metadata(
+                polygon_id=polygon_id,
+                filename=filename,
+                geojson_path=file_path,
+                bounds=bounds
+            )
+            
+            # Save file metadata to database
+            file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=filename,
+                file_path=file_path,
+                file_type='geojson'
+            )
+            
+            response = {
+                'message': f'Polygon saved successfully as {filename}',
+                'file_path': file_path,
+                'database_status': db_result,
+                'file_metadata_status': file_result
+            }
+            
+            return jsonify(response)
         except Exception as e:
             logger.error(f"Error saving polygon: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500
@@ -63,6 +105,9 @@ def register_routes(app):
             geojson_data = data['data']
             polygon_id = data.get('id', 'default_polygon')
             filename = data.get('filename', 'polygon.geojson')
+            
+            # Update status to processing
+            db_service.update_polygon_status(polygon_id, 'processing')
             
             # --- FIX: Robust GeoJSON Parsing and Boundary Extraction ---
             
@@ -86,12 +131,14 @@ def register_routes(app):
             srtm_data = get_srtm_data(min_lon, min_lat, max_lon, max_lat)
             
             if 'error' in srtm_data:
+                db_service.update_polygon_status(polygon_id, 'failed')
                 return jsonify(srtm_data), 500
 
             # 4. Clip and process the SRTM file using the polygon geometry
             processed_data = process_srtm_files(srtm_data['download_paths'], geojson_data, polygon_id)
             
             if 'error' in processed_data:
+                db_service.update_polygon_status(polygon_id, 'failed')
                 return jsonify(processed_data), 500
             
             # 5. Get the final clipped SRTM file path
@@ -109,21 +156,41 @@ def register_routes(app):
             # Add the file path to the response
             processed_data['srtm_file_path'] = srtm_file_path
             
+            # Save analysis results to database
+            analysis_data = {
+                'srtm_path': srtm_file_path,
+                'bounds': [min_lon, min_lat, max_lon, max_lat],
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            db_service.save_analysis_results(polygon_id, analysis_data)
+            db_service.update_polygon_status(polygon_id, 'completed')
+            
+            # Save SRTM file metadata to database
+            srtm_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_srtm.tif",
+                file_path=srtm_file_path,
+                file_type='srtm'
+            )
+            
             # Cleanup temporary file from processing
             if os.path.exists(clipped_srtm_path):
                  os.remove(clipped_srtm_path)
                  logger.debug(f"Removed temp clipped file: {clipped_srtm_path}")
 
-
             return jsonify({
                 'message': 'Polygon processed successfully. SRTM data clipped and saved.',
                 'polygon_id': polygon_id,
                 'srtm_file_path': srtm_file_path,
-                'bounds': [min_lon, min_lat, max_lon, max_lat]
+                'bounds': [min_lon, min_lat, max_lon, max_lat],
+                'database_status': 'saved',
+                'file_metadata_status': srtm_file_result
             })
 
         except Exception as e:
             logger.error(f"Error processing polygon: {str(e)}", exc_info=True)
+            db_service.update_polygon_status(polygon_id, 'failed')
             return jsonify({'error': str(e)}), 500
             
     @app.route('/centroid', methods=['POST'])

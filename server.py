@@ -200,6 +200,55 @@ def update_analysis_paths(analysisId):
     except Exception as e:
         logger.error(f"Error updating analysis paths: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@app.route('/db-health', methods=['GET'])
+def database_health():
+    """Check database connection and create tables if needed"""
+    try:
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        if not db_service.enabled:
+            return jsonify({
+                'status': 'disabled',
+                'message': 'Database not configured - DATABASE_URL not set'
+            }), 503
+        
+        # Test connection
+        conn = db_service._get_connection()
+        if not conn:
+            return jsonify({
+                'status': 'error',
+                'message': 'Database connection failed'
+            }), 503
+        
+        # Check if tables exist
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_name IN ('polygons', 'analyses', 'file_storage', 'users')
+        """)
+        existing_tables = [row[0] for row in cursor.fetchall()]
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({
+            'status': 'connected',
+            'message': 'Database connection successful',
+            'tables_exist': existing_tables,
+            'tables_expected': ['polygons', 'analyses', 'file_storage', 'users'],
+            'all_tables_present': len(existing_tables) == 4
+        })
+        
+    except Exception as e:
+        logger.error(f"Database health check failed: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
 # --- END BYPASS ---
 
 # --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
