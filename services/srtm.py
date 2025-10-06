@@ -303,7 +303,7 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 data_min, data_max = np.nanmin(data_masked), np.nanmax(data_masked)
                 logger.info(f"Elevation range: {data_min} to {data_max}")
                 
-                # Create a beautiful hypsometric color visualization with transparency
+                # Create continuous topographic color visualization (ncl/topo_15lev style)
                 # First normalize the data to 0-1 range for elevation
                 if data_max > data_min:
                     normalized_data = (data_masked - data_min) / (data_max - data_min)
@@ -313,44 +313,49 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 # Create RGBA image with transparent background
                 rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
                 
-                # Beautiful hypsometric color ramp (elevation-based colors)
-                # Low elevations: Blue/Green (water/coastal)
-                # Mid elevations: Yellow/Orange (hills/plateaus) 
-                # High elevations: Red/Brown (mountains)
-                # Very high: White (snow/peaks)
+                # Continuous topographic color ramp (15-level NCL style)
+                # Based on ncl/topo_15lev color scheme for professional cartography
+                def get_topographic_color(elev_norm):
+                    """Get RGB color for normalized elevation (0-1) using continuous topographic ramp"""
+                    if elev_norm < 0.0:
+                        return (0, 0, 139)      # Dark blue (deep water)
+                    elif elev_norm < 0.07:
+                        return (0, 0, 255)      # Blue (water)
+                    elif elev_norm < 0.13:
+                        return (0, 128, 255)     # Light blue (shallow water)
+                    elif elev_norm < 0.20:
+                        return (0, 255, 255)    # Cyan (coastal)
+                    elif elev_norm < 0.27:
+                        return (0, 255, 128)     # Light green (lowlands)
+                    elif elev_norm < 0.33:
+                        return (0, 255, 0)       # Green (vegetation)
+                    elif elev_norm < 0.40:
+                        return (128, 255, 0)    # Yellow-green (hills)
+                    elif elev_norm < 0.47:
+                        return (255, 255, 0)    # Yellow (rolling hills)
+                    elif elev_norm < 0.53:
+                        return (255, 200, 0)    # Orange-yellow (plateaus)
+                    elif elev_norm < 0.60:
+                        return (255, 150, 0)    # Orange (mountains)
+                    elif elev_norm < 0.67:
+                        return (255, 100, 0)    # Red-orange (high mountains)
+                    elif elev_norm < 0.73:
+                        return (255, 50, 0)     # Red (peaks)
+                    elif elev_norm < 0.80:
+                        return (200, 0, 0)      # Dark red (high peaks)
+                    elif elev_norm < 0.87:
+                        return (150, 0, 0)      # Darker red (very high)
+                    elif elev_norm < 0.93:
+                        return (100, 0, 0)      # Darkest red (extreme peaks)
+                    else:
+                        return (255, 255, 255)  # White (snow/ice)
                 
-                # Create color channels based on elevation
+                # Apply continuous color ramp
                 for i in range(data.shape[0]):
                     for j in range(data.shape[1]):
                         if not data_masked.mask[i, j]:  # Valid data point
                             elev_norm = normalized_data[i, j]
-                            
-                            # Hypsometric color ramp
-                            if elev_norm < 0.1:  # Very low (water/coastal)
-                                r = int(0 + elev_norm * 50)  # 0-50
-                                g = int(100 + elev_norm * 100)  # 100-200
-                                b = int(200 + elev_norm * 55)  # 200-255
-                            elif elev_norm < 0.3:  # Low (green/vegetation)
-                                r = int(50 + (elev_norm - 0.1) * 100)  # 50-150
-                                g = int(200 + (elev_norm - 0.1) * 55)  # 200-255
-                                b = int(255 - (elev_norm - 0.1) * 100)  # 255-155
-                            elif elev_norm < 0.6:  # Mid (yellow/orange)
-                                r = int(150 + (elev_norm - 0.3) * 100)  # 150-250
-                                g = int(255 - (elev_norm - 0.3) * 100)  # 255-155
-                                b = int(155 - (elev_norm - 0.3) * 155)  # 155-0
-                            elif elev_norm < 0.8:  # High (red/brown)
-                                r = int(250 + (elev_norm - 0.6) * 5)  # 250-255
-                                g = int(155 - (elev_norm - 0.6) * 100)  # 155-55
-                                b = int(0 + (elev_norm - 0.6) * 50)  # 0-50
-                            else:  # Very high (white/snow)
-                                r = int(255 - (elev_norm - 0.8) * 50)  # 255-205
-                                g = int(55 + (elev_norm - 0.8) * 200)  # 55-255
-                                b = int(50 + (elev_norm - 0.8) * 205)  # 50-255
-                            
-                            # Clamp values to 0-255 range
-                            r = max(0, min(255, r))
-                            g = max(0, min(255, g))
-                            b = max(0, min(255, b))
+                            r, g, b = get_topographic_color(elev_norm)
                             
                             rgba[i, j, 0] = r  # Red
                             rgba[i, j, 1] = g  # Green
