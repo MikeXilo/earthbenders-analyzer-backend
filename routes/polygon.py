@@ -174,6 +174,9 @@ def register_routes(app):
             # Save analysis results to database
             analysis_data = {
                 'srtm_path': srtm_file_path,
+                'slope_path': None,  # Will be set when slope analysis is run
+                'aspect_path': None,  # Will be set when aspect analysis is run
+                'contours_path': None,  # Will be set when contours are generated
                 'bounds': [min_lon, min_lat, max_lon, max_lat],
                 'processed_at': datetime.now().isoformat()
             }

@@ -34,4 +34,4 @@ ENV PYTHONUNBUFFERED=1
 # Run the application with Gunicorn.
 # The `sh -c` wrapper is essential for proper variable expansion.
 # The echoes are diagnostic to confirm environment variables are set correctly.
-CMD ["sh", "-c", "echo \"PORT env var: $PORT\"; echo \"RAILWAY_STATIC_URL: $RAILWAY_STATIC_URL\"; echo \"RAILWAY_PUBLIC_DOMAIN: $RAILWAY_PUBLIC_DOMAIN\"; echo \"Creating database tables...\"; python3 create_tables.py; echo \"Starting Gunicorn on port $PORT\"; PORT=${PORT:-8000}; exec gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]
+CMD ["sh", "-c", "echo \"PORT env var: $PORT\"; echo \"RAILWAY_STATIC_URL: $RAILWAY_STATIC_URL\"; echo \"RAILWAY_PUBLIC_DOMAIN: $RAILWAY_PUBLIC_DOMAIN\"; echo \"Creating database tables...\"; python3 create_tables.py; echo \"Migrating analyses table...\"; python3 migrate_analyses_table.py; echo \"Starting Gunicorn on port $PORT\"; PORT=${PORT:-8000}; exec gunicorn --bind 0.0.0.0:$PORT --timeout 120 --workers 1 --access-logfile - --error-logfile - server:app"]

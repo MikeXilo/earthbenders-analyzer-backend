@@ -47,9 +47,9 @@ def register_routes(app):
                     input_file = clipped_srtm
                     logger.info(f"Using clipped SRTM file from polygon session: {input_file}")
                 else:
-                # SRTM cache directory should only contain raw tiles, not clipped files
-                # If no SRTM file found, return error
-                return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+                    # SRTM cache directory should only contain raw tiles, not clipped files
+                    # If no SRTM file found, return error
+                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
             
             # Output file in the polygon session folder
             slope_file = os.path.join(polygon_session_folder, f"{polygon_id}_slope.tif")
