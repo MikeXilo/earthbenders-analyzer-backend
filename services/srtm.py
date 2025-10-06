@@ -382,6 +382,14 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 img.save(buffered, format="PNG")
                 img_str = base64.b64encode(buffered.getvalue()).decode()
                 
+                # 🧹 CRITICAL CLEANUP: Delete temporary mosaic file to save storage
+                if os.path.exists(temp_mosaic_path):
+                    try:
+                        os.remove(temp_mosaic_path)
+                        logger.info(f"✅ Cleaned up temporary mosaic file: {temp_mosaic_path}")
+                    except Exception as cleanup_error:
+                        logger.warning(f"⚠️ Failed to clean up temp mosaic: {cleanup_error}")
+                
                 return {
                     'image': img_str,
                     'min_height': float(data_min),
@@ -394,7 +402,6 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                         'east': bounds.right,
                         'west': bounds.left
                     },
-                    'temp_mosaic_path': temp_mosaic_path,
                     'clipped_srtm_path': clipped_srtm_path,
                     'visualization_path': visualization_path
                 }

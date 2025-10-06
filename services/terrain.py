@@ -266,6 +266,20 @@ def generate_contours(input_file_path, output_file_path, interval):
         else:
             logger.warning("No contour features were generated")
         
+        # 🧹 CRITICAL CLEANUP: Delete intermediate Shapefile components to save storage
+        logger.info("Cleaning up intermediate Shapefile files...")
+        
+        # Define the list of files to clean up based on the output base path
+        shp_extensions = ['.shp', '.shx', '.dbf', '.prj', '.qpj', '.cpg']
+        for ext in shp_extensions:
+            temp_file_path = f"{output_base}{ext}"
+            if os.path.exists(temp_file_path):
+                try:
+                    os.remove(temp_file_path)
+                    logger.debug(f"✅ Removed temp file: {temp_file_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"⚠️ Failed to clean up {temp_file_path}: {cleanup_error}")
+        
         # Return the contour GeoJSON
         logger.info("Contour generation completed successfully")
         return contours_geojson
