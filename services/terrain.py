@@ -663,7 +663,7 @@ def calculate_drainage_network(input_file_path, output_file_path):
         
         # Step 2: Calculate D8 flow accumulation
         wbt.d8_flow_accumulation(
-            dem=str(filled_dem_path), 
+            i=str(filled_dem_path), 
             output=str(output_file_path)
         )
         
