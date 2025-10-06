@@ -47,14 +47,12 @@ def register_routes(app):
                     input_file = clipped_srtm
                     logger.info(f"Using clipped SRTM file from polygon session: {input_file}")
                 else:
-                    # Check in the root and data directory as fallback
-                    root_input_file = Path(app.root_path) / "clipped_srtm.tif"
-                    data_input_file = SAVE_DIRECTORY / "clipped_srtm.tif"
+                    # Check in the srtms directory as fallback
+                    srtms_dir = SAVE_DIRECTORY / "srtms"
+                    srtms_dir.mkdir(exist_ok=True)  # Ensure srtms directory exists
+                    data_input_file = srtms_dir / "clipped_srtm.tif"
                     
-                    if root_input_file.exists():
-                        input_file = root_input_file
-                        logger.info(f"Using clipped SRTM file from root: {input_file}")
-                    elif data_input_file.exists():
+                    if data_input_file.exists():
                         input_file = data_input_file
                         logger.info(f"Using clipped SRTM file from data directory: {input_file}")
                     else:
@@ -134,15 +132,13 @@ def register_routes(app):
                     logger.info(f"Using SRTM file for contours: {input_file}")
                     break
             
-            # If no SRTM file in the session folder, check standard locations as fallback
+            # If no SRTM file in the session folder, check srtms directory as fallback
             if not input_file:
-                root_input_file = Path(app.root_path) / "clipped_srtm.tif"
-                data_input_file = SAVE_DIRECTORY / "clipped_srtm.tif"
+                srtms_dir = SAVE_DIRECTORY / "srtms"
+                srtms_dir.mkdir(exist_ok=True)  # Ensure srtms directory exists
+                data_input_file = srtms_dir / "clipped_srtm.tif"
                 
-                if root_input_file.exists():
-                    input_file = root_input_file
-                    logger.info(f"Using clipped SRTM file from root: {input_file}")
-                elif data_input_file.exists():
+                if data_input_file.exists():
                     input_file = data_input_file
                     logger.info(f"Using clipped SRTM file from data directory: {input_file}")
                 else:

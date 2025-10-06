@@ -44,7 +44,7 @@ session = SessionWithHeaderRedirection(EARTHDATA_USERNAME, EARTHDATA_PASSWORD)
 def get_srtm_data(geojson_data, output_folder=None):
     """
     Determines which SRTM tiles intersect with the given polygon and downloads them.
-    SRTM tiles are always stored in the SAVE_DIRECTORY/srtm folder for reuse across projects.
+    SRTM tiles are always stored in the SAVE_DIRECTORY/srtms folder for reuse across projects.
     
     Args:
         geojson_data: A GeoJSON object containing a polygon geometry
@@ -102,7 +102,7 @@ def get_srtm_data(geojson_data, output_folder=None):
     # Download the identified tiles (stored in central SRTM directory)
     srtm_files = []
     for lat, lon, tile_name in tiles_to_download:
-        # output_folder is ignored for SRTM tiles - they always go to SAVE_DIRECTORY/srtm
+        # output_folder is ignored for SRTM tiles - they always go to SAVE_DIRECTORY/srtms
         srtm_file = download_srtm(lat, lon, output_folder=None)
         if srtm_file:
             srtm_files.append(srtm_file)
@@ -139,7 +139,7 @@ def download_srtm(lat, lon, output_folder=None):
     logger.info(f"Looking for SRTM tile: {hgt_filename}")
     
     # Define SRTM directory - this is where all SRTM tiles are stored
-    srtm_dir = os.path.join(SAVE_DIRECTORY, "srtm")
+    srtm_dir = os.path.join(SAVE_DIRECTORY, "srtms")
     os.makedirs(srtm_dir, exist_ok=True)
     
     # Define paths for the SRTM file

@@ -54,26 +54,12 @@ def register_routes(app):
             
             # Extract bounds for database
             try:
-                # Start with the full geojson_data
-                geometry_data = geojson_data
+                # Extract geometry from Feature object
+                if geojson_data.get('type') == 'Feature':
+                    geometry_data = geojson_data.get('geometry')
+                else:
+                    geometry_data = geojson_data
                 
-                # Check for FeatureCollection
-                if geometry_data.get('type') == 'FeatureCollection':
-                    # Extract the geometry from the first Feature in the features array
-                    first_feature = geometry_data.get('features', [None])[0]
-                    if first_feature:
-                        geometry_data = first_feature.get('geometry')
-                    else:
-                        raise ValueError("FeatureCollection contains no features.")
-                        
-                # Check for Feature (handles original case, and if the collection only had one)
-                elif geometry_data.get('type') == 'Feature':
-                    geometry_data = geometry_data.get('geometry')
-                
-                # Check if geometry_data is still valid before calling shape()
-                if not geometry_data or geometry_data.get('type') is None:
-                    raise ValueError("Invalid or missing geometry data after extraction.")
-
                 geom = shape(geometry_data)
                 min_lon, min_lat, max_lon, max_lat = geom.bounds
                 bounds = {
@@ -133,25 +119,12 @@ def register_routes(app):
             
             # 1. Convert the GeoJSON dictionary into a Shapely geometry object
             try:
-                # Start with the full geojson_data
-                geometry_data = geojson_data
+                # Extract geometry from Feature object
+                if geojson_data.get('type') == 'Feature':
+                    geometry_data = geojson_data.get('geometry')
+                else:
+                    geometry_data = geojson_data
                 
-                # Check for FeatureCollection
-                if geometry_data.get('type') == 'FeatureCollection':
-                    first_feature = geometry_data.get('features', [None])[0]
-                    if first_feature:
-                        geometry_data = first_feature.get('geometry')
-                    else:
-                        raise ValueError("FeatureCollection contains no features.")
-                        
-                # Check for Feature
-                elif geometry_data.get('type') == 'Feature':
-                    geometry_data = geometry_data.get('geometry')
-                
-                # Check if geometry_data is still valid
-                if not geometry_data or geometry_data.get('type') is None:
-                    raise ValueError("Invalid or missing geometry data after extraction.")
-
                 geom = shape(geometry_data)
                 if not isinstance(geom, Polygon):
                      return jsonify({'error': 'GeoJSON data is not a valid Polygon feature.'}), 400
@@ -191,6 +164,13 @@ def register_routes(app):
             # Copy the clipped SRTM to the named file
             shutil.copy2(clipped_srtm_path, srtm_file_path)
             logger.info(f"Copied clipped SRTM data to: {srtm_file_path}")
+            
+            # Also save a global fallback file in the srtms directory
+            srtms_dir = os.path.join(SAVE_DIRECTORY, "srtms")
+            os.makedirs(srtms_dir, exist_ok=True)
+            global_srtm_path = os.path.join(srtms_dir, "clipped_srtm.tif")
+            shutil.copy2(clipped_srtm_path, global_srtm_path)
+            logger.info(f"Saved global SRTM fallback to: {global_srtm_path}")
             
             # Add the file path to the response
             processed_data['srtm_file_path'] = srtm_file_path
