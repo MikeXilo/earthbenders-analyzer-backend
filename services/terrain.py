@@ -561,6 +561,10 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
             nodata_mask = np.isnan(hillshade_data[0]) | np.isnan(hillshade_data[1]) | np.isnan(hillshade_data[2])
             rgba[nodata_mask, 3] = 0  # Make nodata areas transparent
             
+            # Also handle pure black pixels (0,0,0) which WhiteboxTools often outputs for nodata
+            black_mask = (rgba[:,:,0] == 0) & (rgba[:,:,1] == 0) & (rgba[:,:,2] == 0)
+            rgba[black_mask, 3] = 0  # Make pure black pixels transparent
+            
         elif len(hillshade_data.shape) == 2:
             # Single band data - this shouldn't happen with hypsometrically tinted hillshade
             # but handle it gracefully
@@ -572,6 +576,10 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
             
             # Handle nodata values
             rgba[np.isnan(hillshade_data), 3] = 0
+            
+            # Also handle pure black pixels (0,0,0) which WhiteboxTools often outputs for nodata
+            black_mask = (rgba[:,:,0] == 0) & (rgba[:,:,1] == 0) & (rgba[:,:,2] == 0)
+            rgba[black_mask, 3] = 0  # Make pure black pixels transparent
         else:
             # Fallback - shouldn't happen with proper hypsometrically tinted hillshade
             rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
@@ -580,6 +588,10 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
             rgba[:,:,2] = hillshade_data
             rgba[:,:,3] = 255
             rgba[np.isnan(hillshade_data), 3] = 0
+            
+            # Also handle pure black pixels (0,0,0) which WhiteboxTools often outputs for nodata
+            black_mask = (rgba[:,:,0] == 0) & (rgba[:,:,1] == 0) & (rgba[:,:,2] == 0)
+            rgba[black_mask, 3] = 0  # Make pure black pixels transparent
         
         # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
