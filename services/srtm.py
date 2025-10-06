@@ -372,9 +372,9 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 
                 img = Image.fromarray(rgba)
                 
-                # Upscale the image for better quality (2x resolution)
+                # Upscale the image for better quality (4x resolution for much sharper images)
                 original_size = img.size
-                upscaled_size = (original_size[0] * 2, original_size[1] * 2)
+                upscaled_size = (original_size[0] * 4, original_size[1] * 4)
                 img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
                 
                 # Save the visualization image to a file in the output folder
