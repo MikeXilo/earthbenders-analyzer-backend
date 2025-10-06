@@ -23,30 +23,45 @@ def register_routes(app):
     @app.route('/process_slopes', methods=['POST'])
     def process_slopes():
         try:
+            logger.info("🔍 ============ SLOPE PROCESSING STARTED ============")
             data = request.json
+            logger.info(f"🔍 Received slope request data: {json.dumps(data, indent=2)}")
+            
             if 'id' not in data:
+                logger.error("❌ Missing polygon ID parameter")
                 return jsonify({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
-            logger.info(f"Processing slopes for polygon ID: {polygon_id}")
+            logger.info(f"🔍 Processing slopes for polygon ID: {polygon_id}")
             
             # Construct the path to the polygon session folder
             polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+            logger.info(f"🔍 Looking for polygon session folder: {polygon_session_folder}")
+            
             if not os.path.exists(polygon_session_folder):
+                logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
                 return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+            
+            logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
             # Look for the SRTM data in the polygon session folder
             srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
+            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            
             if os.path.exists(srtm_file):
                 input_file = srtm_file
-                logger.info(f"Using SRTM file from polygon session: {input_file}")
+                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
             else:
+                logger.info(f"❌ SRTM file not found: {srtm_file}")
                 # If no SRTM file in the session folder, look for clipped_srtm.tif
                 clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
+                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
+                
                 if os.path.exists(clipped_srtm):
                     input_file = clipped_srtm
-                    logger.info(f"Using clipped SRTM file from polygon session: {input_file}")
+                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
                 else:
+                    logger.error("❌ No SRTM data found in polygon session folder")
                     # SRTM cache directory should only contain raw tiles, not clipped files
                     # If no SRTM file found, return error
                     return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
