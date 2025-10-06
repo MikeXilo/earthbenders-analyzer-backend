@@ -49,14 +49,14 @@ CORS(app,
      origins='*',
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      expose_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
-     methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"])
+     methods=["GET", "POST", "OPTIONS", "PUT", "DELETE", "PATCH"])
 
 # Set CORS headers for all responses - this is critical for OPTIONS preflight requests
 @app.after_request
 def after_request(response):
     # Always set Access-Control-Allow-Origin to * for development
     response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
     return response
 
