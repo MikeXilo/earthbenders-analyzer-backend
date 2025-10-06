@@ -54,7 +54,13 @@ def register_routes(app):
             
             # Extract bounds for database
             try:
-                geom = shape(geojson_data)
+                # Extract geometry from Feature object
+                if geojson_data.get('type') == 'Feature':
+                    geometry_data = geojson_data.get('geometry')
+                else:
+                    geometry_data = geojson_data
+                
+                geom = shape(geometry_data)
                 min_lon, min_lat, max_lon, max_lat = geom.bounds
                 bounds = {
                     'minLon': min_lon,
@@ -113,7 +119,13 @@ def register_routes(app):
             
             # 1. Convert the GeoJSON dictionary into a Shapely geometry object
             try:
-                geom = shape(geojson_data)
+                # Extract geometry from Feature object
+                if geojson_data.get('type') == 'Feature':
+                    geometry_data = geojson_data.get('geometry')
+                else:
+                    geometry_data = geojson_data
+                
+                geom = shape(geometry_data)
                 if not isinstance(geom, Polygon):
                      return jsonify({'error': 'GeoJSON data is not a valid Polygon feature.'}), 400
             except Exception as e:
