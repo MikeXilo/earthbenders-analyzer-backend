@@ -138,16 +138,18 @@ def register_routes(app):
             
             # -----------------------------------------------------------
 
-            # 3. Fetch SRTM data based on the bounding box
-            logger.info(f"Fetching SRTM data for bounds: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
-            srtm_data = get_srtm_data(min_lon, min_lat, max_lon, max_lat)
+            # 3. Fetch SRTM data based on the GeoJSON polygon
+            logger.info(f"Fetching SRTM data for polygon bounds: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
+            srtm_files = get_srtm_data(geojson_data)
             
-            if 'error' in srtm_data:
+            if not srtm_files:
                 db_service.update_polygon_status(polygon_id, 'failed')
-                return jsonify(srtm_data), 500
+                return jsonify({'error': 'No SRTM data available for this location'}), 500
 
             # 4. Clip and process the SRTM file using the polygon geometry
-            processed_data = process_srtm_files(srtm_data['download_paths'], geojson_data, polygon_id)
+            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+            os.makedirs(polygon_session_folder, exist_ok=True)
+            processed_data = process_srtm_files(srtm_files, geojson_data, polygon_session_folder)
             
             if 'error' in processed_data:
                 db_service.update_polygon_status(polygon_id, 'failed')
@@ -157,8 +159,6 @@ def register_routes(app):
             clipped_srtm_path = processed_data['clipped_srtm_path']
 
             # 6. Save the final clipped SRTM data to the polygon session folder
-            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
-            os.makedirs(polygon_session_folder, exist_ok=True)
             srtm_file_path = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
             
             # Copy the clipped SRTM to the named file
