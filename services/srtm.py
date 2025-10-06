@@ -365,21 +365,26 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                             # Masked/invalid data - transparent
                             rgba[i, j, 3] = 0
                 
-                # Convert to PIL Image and save as PNG (supports transparency)
+                # Convert to PIL Image and upscale for higher resolution
                 from PIL import Image
                 import io
                 import base64
                 
                 img = Image.fromarray(rgba)
                 
+                # Upscale the image for better quality (2x resolution)
+                original_size = img.size
+                upscaled_size = (original_size[0] * 2, original_size[1] * 2)
+                img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+                
                 # Save the visualization image to a file in the output folder
                 visualization_path = os.path.join(output_folder, "srtm_visualization.png")
-                img.save(visualization_path, format="PNG")
+                img_upscaled.save(visualization_path, format="PNG", optimize=True)
                 logger.info(f"Saved SRTM visualization to: {visualization_path}")
                 
                 # Also prepare the base64 encoded version for the response
                 buffered = io.BytesIO()
-                img.save(buffered, format="PNG")
+                img_upscaled.save(buffered, format="PNG", optimize=True)
                 img_str = base64.b64encode(buffered.getvalue()).decode()
                 
                 # 🧹 CRITICAL CLEANUP: Delete temporary mosaic file to save storage
@@ -394,8 +399,8 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                     'image': img_str,
                     'min_height': float(data_min),
                     'max_height': float(data_max),
-                    'width': data.shape[1],
-                    'height': data.shape[0],
+                    'width': upscaled_size[0],  # Use upscaled dimensions
+                    'height': upscaled_size[1],  # Use upscaled dimensions
                     'bounds': {
                         'north': bounds.top,
                         'south': bounds.bottom,

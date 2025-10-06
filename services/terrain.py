@@ -123,10 +123,16 @@ def visualize_slope(slope_file_path, polygon_data=None):
         # Set alpha channel - transparent for NaN values
         rgba[np.isnan(slope_data), 3] = 0
         
-        # Convert to PIL Image and save as PNG
+        # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
+        
+        # Upscale the image for better quality (2x resolution)
+        original_size = img.size
+        upscaled_size = (original_size[0] * 2, original_size[1] * 2)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        
         buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
+        img_upscaled.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
         # Calculate min/max for display
@@ -141,8 +147,8 @@ def visualize_slope(slope_file_path, polygon_data=None):
             'image': img_str,
             'min_slope': float(slope_min),
             'max_slope': float(slope_max),
-            'width': slope_data.shape[1],
-            'height': slope_data.shape[0],
+            'width': upscaled_size[0],  # Use upscaled dimensions
+            'height': upscaled_size[1],  # Use upscaled dimensions
             'bounds': {
                 'north': bounds.top,
                 'south': bounds.bottom,
@@ -399,10 +405,16 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         # Set alpha channel - transparent for NaN values
         rgba[np.isnan(geomorphons_data), 3] = 0
         
-        # Convert to PIL Image and save as PNG
+        # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
+        
+        # Upscale the image for better quality (2x resolution)
+        original_size = img.size
+        upscaled_size = (original_size[0] * 2, original_size[1] * 2)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        
         buffered = io.BytesIO()
-        img.save(buffered, format="PNG")
+        img_upscaled.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
         # Calculate min/max for display
@@ -430,8 +442,8 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
             'image': img_str,
             'min_geomorphons': float(geomorphons_min),
             'max_geomorphons': float(geomorphons_max),
-            'width': geomorphons_data.shape[1],
-            'height': geomorphons_data.shape[0],
+            'width': upscaled_size[0],  # Use upscaled dimensions
+            'height': upscaled_size[1],  # Use upscaled dimensions
             'bounds': {
                 'north': bounds.top,
                 'south': bounds.bottom,
