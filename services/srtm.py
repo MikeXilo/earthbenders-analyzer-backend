@@ -303,24 +303,62 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 data_min, data_max = np.nanmin(data_masked), np.nanmax(data_masked)
                 logger.info(f"Elevation range: {data_min} to {data_max}")
                 
-                # Create a colored visualization with transparency outside the polygon
-                # First normalize the data to 0-255 range for elevation
+                # Create a beautiful hypsometric color visualization with transparency
+                # First normalize the data to 0-1 range for elevation
                 if data_max > data_min:
-                    normalized_data = ((data_masked - data_min) / (data_max - data_min) * 255).astype(np.uint8)
+                    normalized_data = (data_masked - data_min) / (data_max - data_min)
                 else:
-                    normalized_data = np.zeros_like(data, dtype=np.uint8)
+                    normalized_data = np.zeros_like(data, dtype=np.float32)
                 
                 # Create RGBA image with transparent background
                 rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
                 
-                # Create a colormap (grayscale inverted - white is low, black is high)
-                # Assign RGB values based on normalized elevation
-                rgba[:,:,0] = 255 - normalized_data  # R
-                rgba[:,:,1] = 255 - normalized_data  # G
-                rgba[:,:,2] = 255 - normalized_data  # B
+                # Beautiful hypsometric color ramp (elevation-based colors)
+                # Low elevations: Blue/Green (water/coastal)
+                # Mid elevations: Yellow/Orange (hills/plateaus) 
+                # High elevations: Red/Brown (mountains)
+                # Very high: White (snow/peaks)
                 
-                # Set alpha channel - transparent for masked/nodata values, opaque for valid data
-                rgba[:,:,3] = np.where(data_masked.mask, 0, 255)  # Alpha
+                # Create color channels based on elevation
+                for i in range(data.shape[0]):
+                    for j in range(data.shape[1]):
+                        if not data_masked.mask[i, j]:  # Valid data point
+                            elev_norm = normalized_data[i, j]
+                            
+                            # Hypsometric color ramp
+                            if elev_norm < 0.1:  # Very low (water/coastal)
+                                r = int(0 + elev_norm * 50)  # 0-50
+                                g = int(100 + elev_norm * 100)  # 100-200
+                                b = int(200 + elev_norm * 55)  # 200-255
+                            elif elev_norm < 0.3:  # Low (green/vegetation)
+                                r = int(50 + (elev_norm - 0.1) * 100)  # 50-150
+                                g = int(200 + (elev_norm - 0.1) * 55)  # 200-255
+                                b = int(255 - (elev_norm - 0.1) * 100)  # 255-155
+                            elif elev_norm < 0.6:  # Mid (yellow/orange)
+                                r = int(150 + (elev_norm - 0.3) * 100)  # 150-250
+                                g = int(255 - (elev_norm - 0.3) * 100)  # 255-155
+                                b = int(155 - (elev_norm - 0.3) * 155)  # 155-0
+                            elif elev_norm < 0.8:  # High (red/brown)
+                                r = int(250 + (elev_norm - 0.6) * 5)  # 250-255
+                                g = int(155 - (elev_norm - 0.6) * 100)  # 155-55
+                                b = int(0 + (elev_norm - 0.6) * 50)  # 0-50
+                            else:  # Very high (white/snow)
+                                r = int(255 - (elev_norm - 0.8) * 50)  # 255-205
+                                g = int(55 + (elev_norm - 0.8) * 200)  # 55-255
+                                b = int(50 + (elev_norm - 0.8) * 205)  # 50-255
+                            
+                            # Clamp values to 0-255 range
+                            r = max(0, min(255, r))
+                            g = max(0, min(255, g))
+                            b = max(0, min(255, b))
+                            
+                            rgba[i, j, 0] = r  # Red
+                            rgba[i, j, 1] = g  # Green
+                            rgba[i, j, 2] = b  # Blue
+                            rgba[i, j, 3] = 255  # Alpha (opaque)
+                        else:
+                            # Masked/invalid data - transparent
+                            rgba[i, j, 3] = 0
                 
                 # Convert to PIL Image and save as PNG (supports transparency)
                 from PIL import Image
