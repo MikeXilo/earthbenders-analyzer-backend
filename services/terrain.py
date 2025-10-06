@@ -633,6 +633,62 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
         logger.error(f"Error visualizing hillshade: {str(e)}", exc_info=True)
         return None
 
+def calculate_drainage_network(input_file_path, output_file_path):
+    """
+    Calculate drainage network using WhiteboxTools (fill depressions + D8 flow accumulation)
+    
+    Args:
+        input_file_path: Path to the input DEM file
+        output_file_path: Path to the output drainage network file
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    try:
+        # Set the working directory for WhiteboxTools
+        wbt.set_working_dir(os.path.dirname(output_file_path))
+        
+        logger.info(f"Calculating drainage network from {input_file_path}...")
+        
+        # Step 1: Fill depressions to remove sinks
+        filled_dem_path = os.path.join(os.path.dirname(output_file_path), "filled_dem.tif")
+        wbt.fill_depressions(
+            dem=str(input_file_path), 
+            output=str(filled_dem_path)
+        )
+        
+        if not os.path.exists(filled_dem_path):
+            logger.error(f"Failed to fill depressions - intermediate file not created")
+            return False
+        
+        # Step 2: Calculate D8 flow accumulation
+        wbt.d8_flow_accumulation(
+            dem=str(filled_dem_path), 
+            output=str(output_file_path),
+            out_type="cells",  # Output as cell count
+            log=False,  # No logarithmic scaling
+            clip=False,  # Don't clip to watershed
+            esri_pntr=False,  # Use standard D8 pointer
+            pntr=False  # Don't output flow direction
+        )
+        
+        # Clean up intermediate file
+        try:
+            os.remove(filled_dem_path)
+        except:
+            pass  # Ignore cleanup errors
+        
+        if not os.path.exists(output_file_path):
+            logger.error(f"Failed to calculate drainage network - output file not created")
+            return False
+            
+        logger.info(f"Drainage network calculation complete: {output_file_path}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error calculating drainage network: {str(e)}", exc_info=True)
+        return False
+
 def calculate_aspect(input_file_path, output_file_path, convention="azimuth", gradient_alg="Horn", zero_for_flat=False):
     """
     Calculate aspect from a DEM raster using WhiteboxTools
@@ -799,6 +855,129 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
         }
     except Exception as e:
         logger.error(f"Error visualizing aspect: {str(e)}", exc_info=True)
+        return None
+
+def visualize_drainage_network(drainage_file_path, polygon_data=None):
+    """
+    Visualize drainage network data as a colored image with optional polygon masking
+    
+    Args:
+        drainage_file_path: Path to the drainage network raster file
+        polygon_data: Optional GeoJSON polygon data for masking
+        
+    Returns:
+        dict: Visualization data including base64 image and metadata
+    """
+    try:
+        # Read the drainage network raster
+        with rasterio.open(drainage_file_path) as src:
+            drainage_data = src.read(1)
+            bounds = src.bounds
+            profile = src.profile
+        
+        # Mask using the polygon if available
+        if polygon_data:
+            try:
+                from shapely.geometry import shape
+                from rasterio.mask import mask
+                
+                # Convert GeoJSON to shapely geometry
+                polygon = shape(polygon_data['geometry'])
+                clipping_polygon = polygon.buffer(0.0001)  # Small buffer to avoid geometry issues
+                
+                # Create a rasterized mask of the polygon
+                with rasterio.open(drainage_file_path) as src:
+                    # Mask using the polygon - crop=False to keep original extent
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    
+                    # Handle both single band and multi-band data
+                    if len(masked_data.shape) == 3:
+                        drainage_data = masked_data  # Multi-band data
+                    else:
+                        drainage_data = masked_data[0]  # Single band data
+                
+                logger.info(f"Successfully masked drainage network to polygon shape")
+            except Exception as e:
+                logger.error(f"Error masking drainage network with polygon: {str(e)}")
+                # If masking fails, continue with the original data
+        
+        # Create drainage network color mapping
+        # Use a blue color scheme for flow accumulation
+        rgba = np.zeros((drainage_data.shape[0], drainage_data.shape[1], 4), dtype=np.uint8)
+        
+        # Handle nodata values
+        valid_mask = ~np.isnan(drainage_data) & (drainage_data > 0)
+        
+        if np.any(valid_mask):
+            # Get valid data for color mapping
+            valid_data = drainage_data[valid_mask]
+            
+            # Use logarithmic scaling for better visualization
+            log_data = np.log1p(valid_data)  # log(1 + x) to handle zeros
+            log_min = np.min(log_data)
+            log_max = np.max(log_data)
+            
+            if log_max > log_min:
+                # Normalize to 0-1
+                normalized = (log_data - log_min) / (log_max - log_min)
+                
+                # Apply blue color scheme (light blue to dark blue)
+                for i in range(drainage_data.shape[0]):
+                    for j in range(drainage_data.shape[1]):
+                        if valid_mask[i, j]:
+                            val = normalized[valid_mask[i, j]]
+                            # Blue color scheme: light blue (low) to dark blue (high)
+                            rgba[i, j, 0] = int(255 * (1 - val * 0.7))  # R: 255 to 77
+                            rgba[i, j, 1] = int(255 * (1 - val * 0.5))  # G: 255 to 128
+                            rgba[i, j, 2] = 255  # B: always 255 (blue)
+                            rgba[i, j, 3] = 255  # Alpha: opaque
+                        else:
+                            rgba[i, j, 3] = 0  # Alpha: transparent for nodata
+            else:
+                # All values are the same
+                rgba[valid_mask, 0] = 77   # R
+                rgba[valid_mask, 1] = 128 # G
+                rgba[valid_mask, 2] = 255  # B
+                rgba[valid_mask, 3] = 255  # Alpha
+        else:
+            # No valid data
+            rgba[:, :, 3] = 0  # All transparent
+        
+        # Convert to PIL Image and upscale for higher resolution
+        img = Image.fromarray(rgba)
+        
+        # Upscale the image for better quality (4x resolution for much sharper images)
+        original_size = img.size
+        upscaled_size = (original_size[0] * 4, original_size[1] * 4)
+        img_upscaled = img.resize(upscaled_size, Image.Resampling.LANCZOS)
+        
+        buffered = io.BytesIO()
+        img_upscaled.save(buffered, format="PNG", optimize=True)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        # Calculate min/max for display
+        if np.any(valid_mask):
+            drainage_min = np.min(drainage_data[valid_mask])
+            drainage_max = np.max(drainage_data[valid_mask])
+        else:
+            drainage_min = 0
+            drainage_max = 1
+        
+        return {
+            'image': img_str,
+            'min_drainage': float(drainage_min),
+            'max_drainage': float(drainage_max),
+            'width': upscaled_size[0],  # Use upscaled dimensions
+            'height': upscaled_size[1],  # Use upscaled dimensions
+            'bounds': {
+                'north': bounds.top,
+                'south': bounds.bottom,
+                'east': bounds.right,
+                'west': bounds.left
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error visualizing drainage network: {str(e)}", exc_info=True)
         return None
 
 def calculate_centroid(points):

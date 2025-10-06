@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 
-from services.terrain import calculate_slopes, visualize_slope, generate_contours, calculate_geomorphons, visualize_geomorphons, calculate_hypsometrically_tinted_hillshade, visualize_hillshade, calculate_aspect, visualize_aspect
+from services.terrain import calculate_slopes, visualize_slope, generate_contours, calculate_geomorphons, visualize_geomorphons, calculate_hypsometrically_tinted_hillshade, visualize_hillshade, calculate_aspect, visualize_aspect, calculate_drainage_network, visualize_drainage_network
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import get_most_recent_polygon
 
@@ -435,4 +435,81 @@ def register_routes(app):
             return jsonify(aspect_viz)
         except Exception as e:
             logger.error(f"Error processing aspect: {str(e)}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
+
+    @app.route('/process_drainage_network', methods=['POST'])
+    def process_drainage_network():
+        try:
+            logger.info("🔍 ============ DRAINAGE NETWORK PROCESSING STARTED ============")
+            data = request.json
+            logger.info(f"🔍 Received drainage network request data: {json.dumps(data, indent=2)}")
+            
+            if 'id' not in data:
+                logger.error("❌ Missing polygon ID parameter")
+                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                
+            polygon_id = data['id']
+            logger.info(f"🔍 Processing drainage network for polygon ID: {polygon_id}")
+            
+            # Construct the path to the polygon session folder
+            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+            logger.info(f"🔍 Looking for polygon session folder: {polygon_session_folder}")
+            
+            if not os.path.exists(polygon_session_folder):
+                logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
+                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+            
+            logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
+            
+            # Check if SRTM file exists
+            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
+            if not os.path.exists(srtm_file):
+                logger.error(f"❌ SRTM file not found: {srtm_file}")
+                return jsonify({'error': 'SRTM file not found. Please process SRTM first.'}), 404
+            
+            logger.info(f"✅ SRTM file found: {srtm_file}")
+            
+            # Set up output file path
+            drainage_file = os.path.join(polygon_session_folder, f"{polygon_id}_drainage_network.tif")
+            logger.info(f"🔍 Output drainage network file: {drainage_file}")
+            
+            # Calculate drainage network
+            logger.info("🔍 Starting drainage network calculation...")
+            success = calculate_drainage_network(srtm_file, drainage_file)
+            
+            if not success:
+                logger.error("❌ Failed to calculate drainage network")
+                return jsonify({'error': 'Failed to calculate drainage network'}), 500
+            
+            logger.info("✅ Drainage network calculation completed successfully")
+            
+            # Load polygon data for masking
+            polygon_data = None
+            try:
+                polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
+                if os.path.exists(polygon_file):
+                    with open(polygon_file, 'r') as f:
+                        polygon_data = json.load(f)
+                    logger.info("✅ Loaded polygon data for masking")
+                else:
+                    logger.warning("⚠️ No polygon file found, proceeding without masking")
+            except Exception as e:
+                logger.warning(f"⚠️ Could not load polygon data: {str(e)}")
+            
+            # Visualize drainage network
+            logger.info("🔍 Starting drainage network visualization...")
+            drainage_viz = visualize_drainage_network(drainage_file, polygon_data)
+            
+            if not drainage_viz:
+                logger.error("❌ Failed to visualize drainage network data")
+                return jsonify({'error': 'Failed to visualize drainage network data'}), 500
+            
+            logger.info("✅ Drainage network visualization completed successfully")
+            
+            # Add the file paths to the response
+            drainage_viz['drainage_file'] = drainage_file
+                
+            return jsonify(drainage_viz)
+        except Exception as e:
+            logger.error(f"Error processing drainage network: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500 
