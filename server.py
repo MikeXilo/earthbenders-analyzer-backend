@@ -224,16 +224,20 @@ def database_health():
         
         # Check if tables exist
         cursor = conn.cursor()
-        cursor.execute("""
-            SELECT table_name 
-            FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name IN ('polygons', 'analyses', 'file_storage', 'users')
-        """)
-        existing_tables = [row[0] for row in cursor.fetchall()]
-        
-        cursor.close()
-        conn.close()
+        try:
+            cursor.execute("""
+                SELECT table_name 
+                FROM information_schema.tables 
+                WHERE table_schema = 'public' 
+                AND table_name IN ('polygons', 'analyses', 'file_storage', 'users')
+            """)
+            existing_tables = [row[0] for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error checking tables: {str(e)}")
+            existing_tables = []
+        finally:
+            cursor.close()
+            conn.close()
         
         return jsonify({
             'status': 'connected',
