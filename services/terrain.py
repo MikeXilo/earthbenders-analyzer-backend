@@ -896,6 +896,10 @@ def visualize_drainage_network(drainage_file_path, polygon_data=None):
                 logger.error(f"Error masking drainage network with polygon: {str(e)}")
                 # If masking fails, continue with the original data
         
+        # Ensure drainage_data is 2D
+        if len(drainage_data.shape) > 2:
+            drainage_data = drainage_data[0]  # Take first band if multi-dimensional
+        
         # Create drainage network color mapping
         # Use a blue color scheme for flow accumulation
         rgba = np.zeros((drainage_data.shape[0], drainage_data.shape[1], 4), dtype=np.uint8)
