@@ -511,9 +511,13 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the hillshade raster
+        # Read the hillshade raster - hypsometrically tinted hillshade should be RGB
         with rasterio.open(hillshade_file_path) as src:
-            hillshade_data = src.read(1)
+            # Read all bands for RGB data
+            if src.count >= 3:
+                hillshade_data = src.read()  # Read all bands
+            else:
+                hillshade_data = src.read(1)  # Single band fallback
             bounds = src.bounds
             profile = src.profile
         
@@ -531,44 +535,51 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
                 with rasterio.open(hillshade_file_path) as src:
                     # Mask using the polygon - crop=False to keep original extent
                     masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
-                    masked_hillshade = masked_data[0]  # Extract the data array
-                
-                # Replace the original hillshade data with the masked version
-                hillshade_data = masked_hillshade
+                    
+                    # Handle both single band and multi-band data
+                    if len(masked_data.shape) == 3:
+                        hillshade_data = masked_data  # Multi-band RGB data
+                    else:
+                        hillshade_data = masked_data[0]  # Single band data
                 
                 logger.info(f"Successfully masked hillshade to polygon shape")
             except Exception as e:
                 logger.error(f"Error masking hillshade with polygon: {str(e)}")
                 # If masking fails, continue with the original data
         
-        # For hillshade, we can use the RGB data directly since it's already a 24-bit RGB image
-        # We need to handle the case where the data might be in different formats
-        if len(hillshade_data.shape) == 2:
-            # Single band - convert to RGB
+        # Handle the hypsometrically tinted hillshade RGB data properly
+        if len(hillshade_data.shape) == 3 and hillshade_data.shape[0] >= 3:
+            # Multi-band RGB data from hypsometrically tinted hillshade
+            rgba = np.zeros((hillshade_data.shape[1], hillshade_data.shape[2], 4), dtype=np.uint8)
+            rgba[:,:,0] = hillshade_data[0]  # R
+            rgba[:,:,1] = hillshade_data[1]  # G
+            rgba[:,:,2] = hillshade_data[2]  # B
+            rgba[:,:,3] = 255  # Alpha
+            
+            # Handle nodata values properly - set alpha to 0 for nodata areas
+            # Check for nodata values in any of the RGB bands
+            nodata_mask = np.isnan(hillshade_data[0]) | np.isnan(hillshade_data[1]) | np.isnan(hillshade_data[2])
+            rgba[nodata_mask, 3] = 0  # Make nodata areas transparent
+            
+        elif len(hillshade_data.shape) == 2:
+            # Single band data - this shouldn't happen with hypsometrically tinted hillshade
+            # but handle it gracefully
             rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
-            # Use the hillshade data as grayscale
             rgba[:,:,0] = hillshade_data  # R
             rgba[:,:,1] = hillshade_data  # G  
             rgba[:,:,2] = hillshade_data  # B
             rgba[:,:,3] = 255  # Alpha
+            
+            # Handle nodata values
+            rgba[np.isnan(hillshade_data), 3] = 0
         else:
-            # Multi-band RGB data
-            if hillshade_data.shape[0] >= 3:
-                rgba = np.zeros((hillshade_data.shape[1], hillshade_data.shape[2], 4), dtype=np.uint8)
-                rgba[:,:,0] = hillshade_data[0]  # R
-                rgba[:,:,1] = hillshade_data[1]  # G
-                rgba[:,:,2] = hillshade_data[2]  # B
-                rgba[:,:,3] = 255  # Alpha
-            else:
-                # Fallback to grayscale
-                rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
-                rgba[:,:,0] = hillshade_data
-                rgba[:,:,1] = hillshade_data
-                rgba[:,:,2] = hillshade_data
-                rgba[:,:,3] = 255
-        
-        # Set alpha channel - transparent for NaN values
-        rgba[np.isnan(hillshade_data), 3] = 0
+            # Fallback - shouldn't happen with proper hypsometrically tinted hillshade
+            rgba = np.zeros((hillshade_data.shape[0], hillshade_data.shape[1], 4), dtype=np.uint8)
+            rgba[:,:,0] = hillshade_data
+            rgba[:,:,1] = hillshade_data
+            rgba[:,:,2] = hillshade_data
+            rgba[:,:,3] = 255
+            rgba[np.isnan(hillshade_data), 3] = 0
         
         # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
@@ -582,8 +593,14 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
         img_upscaled.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
-        # Calculate min/max for display
-        valid_data = hillshade_data[~np.isnan(hillshade_data)]
+        # Calculate min/max for display - handle both single and multi-band data
+        if len(hillshade_data.shape) == 3:
+            # Multi-band RGB data - use the first band for min/max calculation
+            valid_data = hillshade_data[0][~np.isnan(hillshade_data[0])]
+        else:
+            # Single band data
+            valid_data = hillshade_data[~np.isnan(hillshade_data)]
+        
         hillshade_min = np.min(valid_data) if valid_data.size > 0 else 0
         hillshade_max = np.max(valid_data) if valid_data.size > 0 else 255
         
