@@ -318,37 +318,37 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 def get_topographic_color(elev_norm):
                     """Get RGB color for normalized elevation (0-1) using continuous topographic ramp"""
                     if elev_norm < 0.0:
-                        return (0, 0, 139)      # Dark blue (deep water)
+                        return (16, 105, 40)      
                     elif elev_norm < 0.07:
-                        return (0, 0, 255)      # Blue (water)
+                        return (2, 198, 54)     
                     elif elev_norm < 0.13:
-                        return (0, 128, 255)     # Light blue (shallow water)
+                        return (30, 211, 104)     
                     elif elev_norm < 0.20:
-                        return (0, 255, 255)    # Cyan (coastal)
+                        return (95, 224, 116)    
                     elif elev_norm < 0.27:
-                        return (0, 255, 128)     # Light green (lowlands)
+                        return (161, 235, 130)     
                     elif elev_norm < 0.33:
-                        return (0, 255, 0)       # Green (vegetation)
+                        return (222, 248, 146)       
                     elif elev_norm < 0.40:
-                        return (128, 255, 0)    # Yellow-green (hills)
+                        return (245, 229, 148)    
                     elif elev_norm < 0.47:
-                        return (255, 255, 0)    # Yellow (rolling hills)
+                        return (199, 177, 118)    
                     elif elev_norm < 0.53:
-                        return (255, 200, 0)    # Orange-yellow (plateaus)
+                        return (162, 126, 94)    
                     elif elev_norm < 0.60:
-                        return (255, 150, 0)    # Orange (mountains)
+                        return (143, 98, 85)    
                     elif elev_norm < 0.67:
-                        return (255, 100, 0)    # Red-orange (high mountains)
+                        return (162, 125, 116)    
                     elif elev_norm < 0.73:
-                        return (255, 50, 0)     # Red (peaks)
+                        return (178, 150, 139)     
                     elif elev_norm < 0.80:
-                        return (200, 0, 0)      # Dark red (high peaks)
+                        return (199, 176, 170)      
                     elif elev_norm < 0.87:
-                        return (150, 0, 0)      # Darker red (very high)
+                        return (219, 205, 202)      
                     elif elev_norm < 0.93:
-                        return (100, 0, 0)      # Darkest red (extreme peaks)
+                        return (237, 229, 227)      
                     else:
-                        return (255, 255, 255)  # White (snow/ice)
+                        return (255, 255, 255)  
                 
                 # Apply continuous color ramp
                 for i in range(data.shape[0]):
