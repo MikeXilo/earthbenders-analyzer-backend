@@ -172,6 +172,60 @@ class DatabaseService:
                 conn.close()
             return {'status': 'error', 'message': str(e)}
     
+    def update_analysis_paths(self, polygon_id: str, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Update analysis record with new analysis paths"""
+        if not self.enabled:
+            return {'status': 'disabled'}
+        
+        conn = self._get_connection()
+        if not conn:
+            return {'status': 'error', 'message': 'Database connection failed'}
+        
+        try:
+            cursor = conn.cursor()
+            
+            # Update analysis record with new paths
+            cursor.execute("""
+                UPDATE analyses SET
+                    srtm_path = COALESCE(%s, srtm_path),
+                    slope_path = COALESCE(%s, slope_path),
+                    slope_analysis_path = COALESCE(%s, slope_analysis_path),
+                    aspect_path = COALESCE(%s, aspect_path),
+                    aspect_analysis_path = COALESCE(%s, aspect_analysis_path),
+                    hillshade_path = COALESCE(%s, hillshade_path),
+                    geomorphons_path = COALESCE(%s, geomorphons_path),
+                    drainage_path = COALESCE(%s, drainage_path),
+                    contours_path = COALESCE(%s, contours_path),
+                    statistics = COALESCE(%s, statistics),
+                    updated_at = NOW()
+                WHERE polygon_id = %s
+            """, (
+                analysis_data.get('srtm_path'),
+                analysis_data.get('slope_path'),
+                analysis_data.get('slope_analysis_path'),
+                analysis_data.get('aspect_path'),
+                analysis_data.get('aspect_analysis_path'),
+                analysis_data.get('hillshade_path'),
+                analysis_data.get('geomorphons_path'),
+                analysis_data.get('drainage_path'),
+                analysis_data.get('contours_path'),
+                json.dumps(analysis_data) if analysis_data else None,
+                polygon_id
+            ))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"Updated analysis paths for polygon: {polygon_id}")
+            return {'status': 'success', 'message': 'Analysis paths updated'}
+        except Exception as e:
+            logger.error(f"Error updating analysis paths: {str(e)}")
+            if conn:
+                conn.rollback()
+                conn.close()
+            return {'status': 'error', 'message': str(e)}
+    
     def save_file_metadata(self, polygon_id: str, file_name: str, file_path: str, 
                           file_type: str, file_size: Optional[int] = None) -> Dict[str, Any]:
         """Save file metadata to database"""

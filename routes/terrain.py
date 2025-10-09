@@ -6,6 +6,7 @@ from flask import request, jsonify
 import json
 import os
 from pathlib import Path
+from datetime import datetime
 
 from services.terrain import calculate_slopes, visualize_slope, generate_contours, calculate_geomorphons, visualize_geomorphons, calculate_hypsometrically_tinted_hillshade, visualize_hillshade, calculate_aspect, visualize_aspect, calculate_drainage_network, visualize_drainage_network
 from utils.config import SAVE_DIRECTORY
@@ -93,6 +94,33 @@ def register_routes(app):
             
             # Add the file paths to the response
             slope_viz['slope_file'] = slope_file
+            
+            # Save slope analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with slope path
+            analysis_data = {
+                'slope_path': slope_file,
+                'bounds': slope_viz.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with slope path
+            update_result = db_service.update_analysis_paths(polygon_id, analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save slope file metadata to database
+            slope_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_slope.tif",
+                file_path=slope_file,
+                file_type='slope'
+            )
+            
+            if slope_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save slope file metadata: {slope_file_result.get('message', 'Unknown error')}")
                 
             return jsonify(slope_viz)
         except Exception as e:
@@ -155,6 +183,33 @@ def register_routes(app):
                 return jsonify({'error': 'Failed to generate contours'}), 500
             
             logger.info("============= CONTOUR GENERATION COMPLETED SUCCESSFULLY =============")
+            
+            # Save contours analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with contours path
+            contours_analysis_data = {
+                'contours_path': contour_file,
+                'bounds': contours_geojson.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with contours path
+            update_result = db_service.update_analysis_paths(polygon_id, contours_analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save contours file metadata to database
+            contours_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_contours.geojson",
+                file_path=contour_file,
+                file_type='contours'
+            )
+            
+            if contours_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save contours file metadata: {contours_file_result.get('message', 'Unknown error')}")
             
             return jsonify({
                 'contours': contours_geojson,
@@ -245,6 +300,33 @@ def register_routes(app):
             
             # Add the file paths to the response
             geomorphons_viz['geomorphons_file'] = geomorphons_file
+            
+            # Save geomorphons analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with geomorphons path
+            geomorphons_analysis_data = {
+                'geomorphons_path': geomorphons_file,
+                'bounds': geomorphons_viz.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with geomorphons path
+            update_result = db_service.update_analysis_paths(polygon_id, geomorphons_analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save geomorphons file metadata to database
+            geomorphons_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_geomorphons.tif",
+                file_path=geomorphons_file,
+                file_type='geomorphons'
+            )
+            
+            if geomorphons_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save geomorphons file metadata: {geomorphons_file_result.get('message', 'Unknown error')}")
                 
             return jsonify(geomorphons_viz)
         except Exception as e:
@@ -341,6 +423,33 @@ def register_routes(app):
             
             # Add the file paths to the response
             hillshade_viz['hillshade_file'] = hillshade_file
+            
+            # Save hillshade analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with hillshade path
+            hillshade_analysis_data = {
+                'hillshade_path': hillshade_file,
+                'bounds': hillshade_viz.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with hillshade path
+            update_result = db_service.update_analysis_paths(polygon_id, hillshade_analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save hillshade file metadata to database
+            hillshade_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_hillshade.tif",
+                file_path=hillshade_file,
+                file_type='hillshade'
+            )
+            
+            if hillshade_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save hillshade file metadata: {hillshade_file_result.get('message', 'Unknown error')}")
                 
             return jsonify(hillshade_viz)
         except Exception as e:
@@ -431,6 +540,33 @@ def register_routes(app):
             
             # Add the file paths to the response
             aspect_viz['aspect_file'] = aspect_file
+            
+            # Save aspect analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with aspect path
+            aspect_analysis_data = {
+                'aspect_path': aspect_file,
+                'bounds': aspect_viz.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with aspect path
+            update_result = db_service.update_analysis_paths(polygon_id, aspect_analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save aspect file metadata to database
+            aspect_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_aspect.tif",
+                file_path=aspect_file,
+                file_type='aspect'
+            )
+            
+            if aspect_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save aspect file metadata: {aspect_file_result.get('message', 'Unknown error')}")
                 
             return jsonify(aspect_viz)
         except Exception as e:
@@ -508,6 +644,33 @@ def register_routes(app):
             
             # Add the file paths to the response
             drainage_viz['drainage_file'] = drainage_file
+            
+            # Save drainage analysis results to database
+            from services.database import DatabaseService
+            db_service = DatabaseService()
+            
+            # Update the analyses table with drainage path
+            drainage_analysis_data = {
+                'drainage_path': drainage_file,
+                'bounds': drainage_viz.get('bounds', {}),
+                'processed_at': datetime.now().isoformat()
+            }
+            
+            # Update existing analysis record with drainage path
+            update_result = db_service.update_analysis_paths(polygon_id, drainage_analysis_data)
+            if update_result.get('status') != 'success':
+                logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+            
+            # Save drainage file metadata to database
+            drainage_file_result = db_service.save_file_metadata(
+                polygon_id=polygon_id,
+                file_name=f"{polygon_id}_drainage_network.tif",
+                file_path=drainage_file,
+                file_type='drainage'
+            )
+            
+            if drainage_file_result.get('status') != 'success':
+                logger.warning(f"Failed to save drainage file metadata: {drainage_file_result.get('message', 'Unknown error')}")
                 
             return jsonify(drainage_viz)
         except Exception as e:
