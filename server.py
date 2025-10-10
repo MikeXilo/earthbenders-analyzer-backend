@@ -123,64 +123,7 @@ logger.info("=== END FLASK ROUTE MAP ===")
 # --- END DEBUG ---
 
 # --- BYPASS: DIRECT ROUTE DEFINITIONS ---
-# Define critical routes directly in server.py to bypass Railway routing issues
-@app.route('/save_polygon', methods=['POST'])
-def save_polygon_direct():
-    """Save polygon data to file"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        # Extract polygon data
-        polygon_data = data.get('data')
-        filename = data.get('filename', 'polygon.geojson')
-        
-        if not polygon_data:
-            return jsonify({'error': 'No polygon data provided'}), 400
-        
-        # Save to file
-        file_path = SAVE_DIRECTORY / filename
-        with open(file_path, 'w') as f:
-            json.dump(polygon_data, f, indent=2)
-        
-        logger.info(f"Polygon saved to {file_path}")
-        return jsonify({
-            'status': 'success',
-            'message': 'Polygon data saved successfully',
-            'filename': filename,
-            'path': str(file_path)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error saving polygon: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/process_slopes', methods=['POST'])
-def process_slopes_direct():
-    """Process terrain slopes for polygon"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        # Extract polygon data
-        polygon_data = data.get('data')
-        if not polygon_data:
-            return jsonify({'error': 'No polygon data provided'}), 400
-        
-        # Process slopes (simplified version)
-        logger.info("Processing slopes for polygon")
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Slopes processed successfully',
-            'result': 'Slope analysis completed'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error processing slopes: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+# Note: Critical routes are now handled by modular route system
 
 @app.route('/update_analysis_paths/<analysisId>', methods=['PATCH'])
 def update_analysis_paths(analysisId):
@@ -290,42 +233,14 @@ def create_tables_endpoint():
         }), 500
 # --- END BYPASS ---
 
-# --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
-# This explicit definition should force the Railway proxy to stop serving the ASCII art
-# by overriding the default Flask behavior for '/'.
-@app.route('/', methods=['GET'])
-def root_override():
-    return jsonify({
-        'status': 'Flask service running',
-        'message': 'API is active and serving routes.',
-        'version': '6.1',
-        'routes_loaded': True
-    })
-# --- END FIX ---
+# --- ROOT ROUTE HANDLED BY CORE.PY ---
+# The root route is now properly handled by the modular route system
 
 # Add a simple test route to verify Flask is working
 @app.route('/test')
 def test_route():
     return jsonify({'message': 'Flask app is working!', 'routes': ['/health', '/save_polygon', '/process_polygon']})
 
-# Direct health endpoint to ensure it's always available
-@app.route('/health')
-def health_direct():
-    """Direct health check endpoint"""
-    try:
-        return jsonify({
-            'status': 'healthy',
-            'message': 'Backend service is running',
-            'timestamp': time.time(),
-            'version': '6.1'
-        }), 200
-    except Exception as e:
-        logger.error(f"Health check failed: {str(e)}")
-        return jsonify({
-            'status': 'unhealthy',
-            'error': str(e),
-            'timestamp': time.time()
-        }), 500
 
 # Handle OPTIONS requests for CORS
 @app.route('/', methods=['OPTIONS'])
