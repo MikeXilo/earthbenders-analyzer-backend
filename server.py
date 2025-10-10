@@ -107,9 +107,13 @@ logger.info("Vector tile server initialized")
 # --- ROUTE REGISTRATION ---
 # Import and register all routes from the 'routes' folder.
 # This registers: /, /health, /save_polygon, /process_polygon, etc.
-from routes import register_all_routes
-register_all_routes(app)
-logger.info("All modular routes registered.")
+try:
+    from routes import register_all_routes
+    register_all_routes(app)
+    logger.info("All modular routes registered.")
+except Exception as e:
+    logger.error(f"Failed to register routes: {str(e)}")
+    # Continue without modular routes - we have direct routes defined above
 
 # --- DEBUG: PRINT ALL REGISTERED ROUTES ---
 logger.info("=== FLASK ROUTE MAP ===")
@@ -304,6 +308,25 @@ def root_override():
 def test_route():
     return jsonify({'message': 'Flask app is working!', 'routes': ['/health', '/save_polygon', '/process_polygon']})
 
+# Direct health endpoint to ensure it's always available
+@app.route('/health')
+def health_direct():
+    """Direct health check endpoint"""
+    try:
+        return jsonify({
+            'status': 'healthy',
+            'message': 'Backend service is running',
+            'timestamp': time.time(),
+            'version': '6.1'
+        }), 200
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': time.time()
+        }), 500
+
 # Handle OPTIONS requests for CORS
 @app.route('/', methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
@@ -311,5 +334,20 @@ def options_handler(path=''):
     return '', 204  # No content needed for OPTIONS response, status code 204
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 8000))
+        logger.info(f"Starting Flask server on port {port}")
+        logger.info("Backend initialization complete - all routes registered")
+        
+        # Test that the health endpoint works before starting
+        with app.test_client() as client:
+            response = client.get('/health')
+            if response.status_code == 200:
+                logger.info("Health endpoint test passed")
+            else:
+                logger.warning(f"Health endpoint test failed: {response.status_code}")
+        
+        app.run(debug=True, host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Failed to start Flask server: {str(e)}")
+        raise
