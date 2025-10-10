@@ -223,7 +223,7 @@ class DatabaseService:
             return {'status': 'error', 'message': str(e)}
     
     def save_file_metadata(self, polygon_id: str, file_name: str, file_path: str, 
-                          file_type: str, file_size: Optional[int] = None) -> Dict[str, Any]:
+                          file_type: str, file_size: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Save file metadata to database"""
         if not self.enabled:
             return {'status': 'disabled'}
@@ -237,15 +237,17 @@ class DatabaseService:
             
             # Insert file metadata
             cursor.execute("""
-                INSERT INTO file_storage (id, polygon_id, file_name, file_path, file_type, file_size, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO file_storage (id, polygon_id, user_id, file_name, file_path, file_type, file_size, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (id) DO UPDATE SET
+                    user_id = EXCLUDED.user_id,
                     file_path = EXCLUDED.file_path,
                     file_size = EXCLUDED.file_size,
                     updated_at = NOW()
             """, (
                 f"file_{polygon_id}_{file_type}",
                 polygon_id,
+                user_id,
                 file_name,
                 file_path,
                 file_type,
