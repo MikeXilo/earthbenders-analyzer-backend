@@ -40,11 +40,13 @@ def register_routes(app):
             geojson_data = data['data']
             filename = data['filename']
             
-            # Extract polygon ID if provided
+            # Extract polygon ID and user information if provided
             polygon_id = data.get('id', None)
+            user_id = data.get('user_id', None)
+            user_email = data.get('user_email', None)
             
             logger.debug(f"GeoJSON data structure: {json.dumps(geojson_data, indent=2)}")
-            logger.info(f"Saving polygon with ID: {polygon_id}")
+            logger.info(f"Saving polygon with ID: {polygon_id}, User: {user_id}")
             
             if not filename.endswith('.geojson'):
                 return jsonify({'error': 'Invalid file extension'}), 400
@@ -77,7 +79,8 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 filename=filename,
                 geojson_path=file_path,
-                bounds=bounds
+                bounds=bounds,
+                user_id=user_id
             )
             
             # Save file metadata to database
@@ -85,7 +88,8 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 file_name=filename,
                 file_path=file_path,
-                file_type='geojson'
+                file_type='geojson',
+                user_id=user_id
             )
             
             response = {
