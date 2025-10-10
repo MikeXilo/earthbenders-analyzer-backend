@@ -268,3 +268,87 @@ class DatabaseService:
                 conn.rollback()
                 conn.close()
             return {'status': 'error', 'message': str(e)}
+    
+    def recalculate_statistics(self, polygon_id: str) -> Dict[str, Any]:
+        """Recalculate terrain statistics for a polygon"""
+        if not self.enabled:
+            return {'status': 'disabled'}
+        
+        conn = self._get_connection()
+        if not conn:
+            return {'status': 'error', 'message': 'Database connection failed'}
+        
+        try:
+            cursor = conn.cursor()
+            
+            # Get current analysis data
+            cursor.execute("""
+                SELECT srtm_path, slope_path, aspect_path, statistics
+                FROM analyses 
+                WHERE polygon_id = %s
+            """, (polygon_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                cursor.close()
+                conn.close()
+                return {'status': 'error', 'message': 'Analysis not found'}
+            
+            srtm_path = row['srtm_path']
+            slope_path = row['slope_path']
+            aspect_path = row['aspect_path']
+            current_stats = row['statistics'] or {}
+            
+            # Check if we have the required files
+            if not srtm_path:
+                cursor.close()
+                conn.close()
+                return {'status': 'error', 'message': 'SRTM file not found'}
+            
+            # Calculate statistics if we have slope and aspect
+            if slope_path and aspect_path:
+                try:
+                    # Import statistics calculation
+                    from services.statistics import calculate_terrain_statistics
+                    
+                    # Calculate new statistics
+                    new_stats = calculate_terrain_statistics(
+                        srtm_path=srtm_path,
+                        slope_path=slope_path,
+                        aspect_path=aspect_path,
+                        bounds=current_stats.get('bounds', {})
+                    )
+                    
+                    # Merge with existing statistics
+                    updated_stats = {**current_stats, **new_stats}
+                    
+                    # Update database
+                    cursor.execute("""
+                        UPDATE analyses 
+                        SET statistics = %s, updated_at = NOW()
+                        WHERE polygon_id = %s
+                    """, (json.dumps(updated_stats), polygon_id))
+                    
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    
+                    logger.info(f"Recalculated statistics for polygon: {polygon_id}")
+                    return {'status': 'success', 'message': 'Statistics recalculated', 'statistics': updated_stats}
+                    
+                except Exception as e:
+                    logger.error(f"Error calculating statistics: {str(e)}")
+                    cursor.close()
+                    conn.close()
+                    return {'status': 'error', 'message': f'Statistics calculation failed: {str(e)}'}
+            else:
+                cursor.close()
+                conn.close()
+                return {'status': 'warning', 'message': 'Slope and aspect files required for statistics calculation'}
+                
+        except Exception as e:
+            logger.error(f"Error in recalculate_statistics: {str(e)}")
+            if conn:
+                conn.rollback()
+                conn.close()
+            return {'status': 'error', 'message': str(e)}
