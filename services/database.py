@@ -189,9 +189,7 @@ class DatabaseService:
                 UPDATE analyses SET
                     srtm_path = COALESCE(%s, srtm_path),
                     slope_path = COALESCE(%s, slope_path),
-                    slope_analysis_path = COALESCE(%s, slope_analysis_path),
                     aspect_path = COALESCE(%s, aspect_path),
-                    aspect_analysis_path = COALESCE(%s, aspect_analysis_path),
                     hillshade_path = COALESCE(%s, hillshade_path),
                     geomorphons_path = COALESCE(%s, geomorphons_path),
                     drainage_path = COALESCE(%s, drainage_path),
@@ -202,9 +200,7 @@ class DatabaseService:
             """, (
                 analysis_data.get('srtm_path'),
                 analysis_data.get('slope_path'),
-                analysis_data.get('slope_analysis_path'),
                 analysis_data.get('aspect_path'),
-                analysis_data.get('aspect_analysis_path'),
                 analysis_data.get('hillshade_path'),
                 analysis_data.get('geomorphons_path'),
                 analysis_data.get('drainage_path'),
