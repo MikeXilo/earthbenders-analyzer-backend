@@ -175,6 +175,9 @@ def register_routes(app):
             # Add the file path to the response
             processed_data['srtm_file_path'] = srtm_file_path
             
+            # Extract user information if provided
+            user_id = data.get('user_id', None)
+            
             # Save analysis results to database
             analysis_data = {
                 'srtm_path': srtm_file_path,
@@ -185,7 +188,7 @@ def register_routes(app):
                 'processed_at': datetime.now().isoformat()
             }
             
-            db_service.save_analysis_results(polygon_id, analysis_data)
+            db_service.save_analysis_results(polygon_id, analysis_data, user_id)
             db_service.update_polygon_status(polygon_id, 'completed')
             
             # Save SRTM file metadata to database
@@ -193,7 +196,8 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 file_name=f"{polygon_id}_srtm.tif",
                 file_path=srtm_file_path,
-                file_type='srtm'
+                file_type='srtm',
+                user_id=user_id
             )
             
             # Cleanup temporary file from processing

@@ -126,7 +126,7 @@ class DatabaseService:
                 conn.close()
             return {'status': 'error', 'message': str(e)}
     
-    def save_analysis_results(self, polygon_id: str, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+    def save_analysis_results(self, polygon_id: str, analysis_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """Save analysis results to database"""
         if not self.enabled:
             return {'status': 'disabled'}
@@ -140,9 +140,10 @@ class DatabaseService:
             
             # Insert or update analysis results
             cursor.execute("""
-                INSERT INTO analyses (id, polygon_id, srtm_path, slope_path, aspect_path, contours_path, statistics, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO analyses (id, polygon_id, user_id, srtm_path, slope_path, aspect_path, contours_path, statistics, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (polygon_id) DO UPDATE SET
+                    user_id = EXCLUDED.user_id,
                     srtm_path = EXCLUDED.srtm_path,
                     slope_path = EXCLUDED.slope_path,
                     aspect_path = EXCLUDED.aspect_path,
@@ -152,6 +153,7 @@ class DatabaseService:
             """, (
                 f"analysis_{polygon_id}",
                 polygon_id,
+                user_id,
                 analysis_data.get('srtm_path'),
                 analysis_data.get('slope_path'),
                 analysis_data.get('aspect_path'),
