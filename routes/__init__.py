@@ -1,7 +1,7 @@
 """
 Route handlers for the Earthbenders application
 """
-from routes import core, polygon, terrain
+from routes import core, polygon, terrain, projects
 
 def register_all_routes(app):
     """
@@ -14,6 +14,7 @@ def register_all_routes(app):
     core.register_routes(app)
     polygon.register_routes(app)
     terrain.register_routes(app)
+    projects.register_routes(app)
     
     # Log registration
     import logging
