@@ -66,6 +66,7 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         
         # Calculate slope statistics
         slope_mean = float(np.mean(slope_masked)) if len(slope_masked) > 0 else 0
+        slope_min = float(np.min(slope_masked)) if len(slope_masked) > 0 else 0
         slope_max = float(np.max(slope_masked)) if len(slope_masked) > 0 else 0
         slope_std = float(np.std(slope_masked)) if len(slope_masked) > 0 else 0
         
@@ -93,6 +94,7 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
             'elevation_max': round(elevation_max, 2),
             'elevation_mean': round(elevation_mean, 2),
             'slope_mean': round(slope_mean, 2),
+            'slope_min': round(slope_min, 2),
             'slope_max': round(slope_max, 2),
             'slope_std': round(slope_std, 2),
             'aspect_mean': round(aspect_mean, 2),

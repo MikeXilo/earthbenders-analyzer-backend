@@ -62,7 +62,8 @@ def register_routes(app):
                         a.updated_at,
                         p.name as polygon_name,
                         p.status as polygon_status,
-                        p.bounds as polygon_bounds
+                        p.bounds as polygon_bounds,
+                        p.geojson_path
                     FROM analyses a
                     LEFT JOIN polygons p ON a.polygon_id = p.id
                     WHERE a.user_id = %s
@@ -85,6 +86,26 @@ def register_routes(app):
                         except (json.JSONDecodeError, TypeError):
                             logger.warning(f"Could not parse statistics for project {row['polygon_id']}")
                             statistics = {}
+                    
+                    # Load polygon geometry from GeoJSON file
+                    polygon_geometry = None
+                    if row['geojson_path']:
+                        try:
+                            import os
+                            geojson_file_path = os.path.join('/app/data', row['geojson_path'])
+                            if os.path.exists(geojson_file_path):
+                                with open(geojson_file_path, 'r') as f:
+                                    geojson_data = json.load(f)
+                                    # Extract geometry from GeoJSON
+                                    if geojson_data.get('type') == 'Feature':
+                                        polygon_geometry = geojson_data.get('geometry')
+                                    else:
+                                        polygon_geometry = geojson_data
+                            else:
+                                logger.warning(f"GeoJSON file not found: {geojson_file_path}")
+                        except Exception as e:
+                            logger.warning(f"Could not load polygon geometry for project {row['polygon_id']}: {str(e)}")
+                            polygon_geometry = None
                     
                     # Create analysis files object
                     analysis_files = {
@@ -116,7 +137,8 @@ def register_routes(app):
                         'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None,
                         'statistics': statistics,
                         'analysis_files': analysis_files,
-                        'bounds': bounds
+                        'bounds': bounds,
+                        'geometry': polygon_geometry
                     }
                     
                     projects.append(project)
