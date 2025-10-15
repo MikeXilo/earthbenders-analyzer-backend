@@ -362,7 +362,8 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
                 # Create a rasterized mask of the polygon
                 with rasterio.open(geomorphons_file_path) as src:
                     # Mask using the polygon - crop=False to keep original extent
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    # Use 0 as nodata value since Geomorphons are integer values (1-10), so 0 is safe
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=0)
                     masked_geomorphons = masked_data[0]  # Extract the data array
                 
                 # Replace the original geomorphons data with the masked version

@@ -33,9 +33,19 @@ def register_routes(app):
         
     @app.route('/health')
     def health_check():
-        cors_origin = os.environ.get('CORS_ORIGIN', '*')
-        return jsonify({
-            'status': 'healthy',
-            'timestamp': time.time(),
-            'cors_origin': cors_origin
-        }), 200
+        """Simple health check endpoint that doesn't depend on external services"""
+        try:
+            cors_origin = os.environ.get('CORS_ORIGIN', '*')
+            return jsonify({
+                'status': 'healthy',
+                'timestamp': time.time(),
+                'cors_origin': cors_origin,
+                'message': 'Backend service is running'
+            }), 200
+        except Exception as e:
+            logger.error(f"Health check failed: {str(e)}")
+            return jsonify({
+                'status': 'unhealthy',
+                'error': str(e),
+                'timestamp': time.time()
+            }), 500

@@ -126,7 +126,7 @@ class DatabaseService:
                 conn.close()
             return {'status': 'error', 'message': str(e)}
     
-    def save_analysis_results(self, polygon_id: str, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
+    def save_analysis_results(self, polygon_id: str, analysis_data: Dict[str, Any], user_id: Optional[str] = None) -> Dict[str, Any]:
         """Save analysis results to database"""
         if not self.enabled:
             return {'status': 'disabled'}
@@ -140,9 +140,10 @@ class DatabaseService:
             
             # Insert or update analysis results
             cursor.execute("""
-                INSERT INTO analyses (id, polygon_id, srtm_path, slope_path, aspect_path, contours_path, statistics, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO analyses (id, polygon_id, user_id, srtm_path, slope_path, aspect_path, contours_path, statistics, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (polygon_id) DO UPDATE SET
+                    user_id = EXCLUDED.user_id,
                     srtm_path = EXCLUDED.srtm_path,
                     slope_path = EXCLUDED.slope_path,
                     aspect_path = EXCLUDED.aspect_path,
@@ -152,6 +153,7 @@ class DatabaseService:
             """, (
                 f"analysis_{polygon_id}",
                 polygon_id,
+                user_id,
                 analysis_data.get('srtm_path'),
                 analysis_data.get('slope_path'),
                 analysis_data.get('aspect_path'),
@@ -189,9 +191,7 @@ class DatabaseService:
                 UPDATE analyses SET
                     srtm_path = COALESCE(%s, srtm_path),
                     slope_path = COALESCE(%s, slope_path),
-                    slope_analysis_path = COALESCE(%s, slope_analysis_path),
                     aspect_path = COALESCE(%s, aspect_path),
-                    aspect_analysis_path = COALESCE(%s, aspect_analysis_path),
                     hillshade_path = COALESCE(%s, hillshade_path),
                     geomorphons_path = COALESCE(%s, geomorphons_path),
                     drainage_path = COALESCE(%s, drainage_path),
@@ -202,9 +202,7 @@ class DatabaseService:
             """, (
                 analysis_data.get('srtm_path'),
                 analysis_data.get('slope_path'),
-                analysis_data.get('slope_analysis_path'),
                 analysis_data.get('aspect_path'),
-                analysis_data.get('aspect_analysis_path'),
                 analysis_data.get('hillshade_path'),
                 analysis_data.get('geomorphons_path'),
                 analysis_data.get('drainage_path'),
@@ -227,7 +225,7 @@ class DatabaseService:
             return {'status': 'error', 'message': str(e)}
     
     def save_file_metadata(self, polygon_id: str, file_name: str, file_path: str, 
-                          file_type: str, file_size: Optional[int] = None) -> Dict[str, Any]:
+                          file_type: str, file_size: Optional[int] = None, user_id: Optional[str] = None) -> Dict[str, Any]:
         """Save file metadata to database"""
         if not self.enabled:
             return {'status': 'disabled'}
@@ -241,15 +239,17 @@ class DatabaseService:
             
             # Insert file metadata
             cursor.execute("""
-                INSERT INTO file_storage (id, polygon_id, file_name, file_path, file_type, file_size, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO file_storage (id, polygon_id, user_id, file_name, file_path, file_type, file_size, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (id) DO UPDATE SET
+                    user_id = EXCLUDED.user_id,
                     file_path = EXCLUDED.file_path,
                     file_size = EXCLUDED.file_size,
                     updated_at = NOW()
             """, (
                 f"file_{polygon_id}_{file_type}",
                 polygon_id,
+                user_id,
                 file_name,
                 file_path,
                 file_type,
@@ -264,6 +264,90 @@ class DatabaseService:
             return {'status': 'success', 'message': 'File metadata saved'}
         except Exception as e:
             logger.error(f"Error saving file metadata: {str(e)}")
+            if conn:
+                conn.rollback()
+                conn.close()
+            return {'status': 'error', 'message': str(e)}
+    
+    def recalculate_statistics(self, polygon_id: str) -> Dict[str, Any]:
+        """Recalculate terrain statistics for a polygon"""
+        if not self.enabled:
+            return {'status': 'disabled'}
+        
+        conn = self._get_connection()
+        if not conn:
+            return {'status': 'error', 'message': 'Database connection failed'}
+        
+        try:
+            cursor = conn.cursor()
+            
+            # Get current analysis data
+            cursor.execute("""
+                SELECT srtm_path, slope_path, aspect_path, statistics
+                FROM analyses 
+                WHERE polygon_id = %s
+            """, (polygon_id,))
+            
+            row = cursor.fetchone()
+            if not row:
+                cursor.close()
+                conn.close()
+                return {'status': 'error', 'message': 'Analysis not found'}
+            
+            srtm_path = row['srtm_path']
+            slope_path = row['slope_path']
+            aspect_path = row['aspect_path']
+            current_stats = row['statistics'] or {}
+            
+            # Check if we have the required files
+            if not srtm_path:
+                cursor.close()
+                conn.close()
+                return {'status': 'error', 'message': 'SRTM file not found'}
+            
+            # Calculate statistics if we have SRTM data
+            if srtm_path:
+                try:
+                    # Import statistics calculation
+                    from services.statistics import calculate_terrain_statistics
+                    
+                    # Calculate new statistics (will handle missing slope/aspect gracefully)
+                    new_stats = calculate_terrain_statistics(
+                        srtm_path=srtm_path,
+                        slope_path=slope_path,
+                        aspect_path=aspect_path,
+                        bounds=current_stats.get('bounds', {})
+                    )
+                    
+                    # Merge with existing statistics
+                    updated_stats = {**current_stats, **new_stats}
+                    
+                    # Update database
+                    cursor.execute("""
+                        UPDATE analyses 
+                        SET statistics = %s, updated_at = NOW()
+                        WHERE polygon_id = %s
+                    """, (json.dumps(updated_stats), polygon_id))
+                    
+                    conn.commit()
+                    cursor.close()
+                    conn.close()
+                    
+                    logger.info(f"Recalculated statistics for polygon: {polygon_id}")
+                    return {'status': 'success', 'message': 'Statistics recalculated', 'statistics': updated_stats}
+                    
+                except Exception as e:
+                    logger.error(f"Error calculating statistics: {str(e)}")
+                    cursor.close()
+                    conn.close()
+                    return {'status': 'error', 'message': f'Statistics calculation failed: {str(e)}'}
+            else:
+                cursor.close()
+                conn.close()
+                return {'status': 'warning', 'message': 'Slope and aspect files required for statistics calculation'}
+                
+        except Exception as e:
+            logger.error(f"Error in recalculate_statistics: {str(e)}")
             if conn:
                 conn.rollback()
                 conn.close()

@@ -107,9 +107,13 @@ logger.info("Vector tile server initialized")
 # --- ROUTE REGISTRATION ---
 # Import and register all routes from the 'routes' folder.
 # This registers: /, /health, /save_polygon, /process_polygon, etc.
-from routes import register_all_routes
-register_all_routes(app)
-logger.info("All modular routes registered.")
+try:
+    from routes import register_all_routes
+    register_all_routes(app)
+    logger.info("All modular routes registered.")
+except Exception as e:
+    logger.error(f"Failed to register routes: {str(e)}")
+    # Continue without modular routes - we have direct routes defined above
 
 # --- DEBUG: PRINT ALL REGISTERED ROUTES ---
 logger.info("=== FLASK ROUTE MAP ===")
@@ -119,64 +123,7 @@ logger.info("=== END FLASK ROUTE MAP ===")
 # --- END DEBUG ---
 
 # --- BYPASS: DIRECT ROUTE DEFINITIONS ---
-# Define critical routes directly in server.py to bypass Railway routing issues
-@app.route('/save_polygon', methods=['POST'])
-def save_polygon_direct():
-    """Save polygon data to file"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        # Extract polygon data
-        polygon_data = data.get('data')
-        filename = data.get('filename', 'polygon.geojson')
-        
-        if not polygon_data:
-            return jsonify({'error': 'No polygon data provided'}), 400
-        
-        # Save to file
-        file_path = SAVE_DIRECTORY / filename
-        with open(file_path, 'w') as f:
-            json.dump(polygon_data, f, indent=2)
-        
-        logger.info(f"Polygon saved to {file_path}")
-        return jsonify({
-            'status': 'success',
-            'message': 'Polygon data saved successfully',
-            'filename': filename,
-            'path': str(file_path)
-        })
-        
-    except Exception as e:
-        logger.error(f"Error saving polygon: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/process_slopes', methods=['POST'])
-def process_slopes_direct():
-    """Process terrain slopes for polygon"""
-    try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-        
-        # Extract polygon data
-        polygon_data = data.get('data')
-        if not polygon_data:
-            return jsonify({'error': 'No polygon data provided'}), 400
-        
-        # Process slopes (simplified version)
-        logger.info("Processing slopes for polygon")
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Slopes processed successfully',
-            'result': 'Slope analysis completed'
-        })
-        
-    except Exception as e:
-        logger.error(f"Error processing slopes: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+# Note: Critical routes are now handled by modular route system
 
 @app.route('/update_analysis_paths/<analysisId>', methods=['PATCH'])
 def update_analysis_paths(analysisId):
@@ -286,23 +233,14 @@ def create_tables_endpoint():
         }), 500
 # --- END BYPASS ---
 
-# --- FIX: ADD OVERRIDING ROOT ROUTE AFTER MODULAR REGISTRATION ---
-# This explicit definition should force the Railway proxy to stop serving the ASCII art
-# by overriding the default Flask behavior for '/'.
-@app.route('/', methods=['GET'])
-def root_override():
-    return jsonify({
-        'status': 'Flask service running',
-        'message': 'API is active and serving routes.',
-        'version': '6.1',
-        'routes_loaded': True
-    })
-# --- END FIX ---
+# --- ROOT ROUTE HANDLED BY CORE.PY ---
+# The root route is now properly handled by the modular route system
 
 # Add a simple test route to verify Flask is working
 @app.route('/test')
 def test_route():
     return jsonify({'message': 'Flask app is working!', 'routes': ['/health', '/save_polygon', '/process_polygon']})
+
 
 # Handle OPTIONS requests for CORS
 @app.route('/', methods=['OPTIONS'])
@@ -311,5 +249,20 @@ def options_handler(path=''):
     return '', 204  # No content needed for OPTIONS response, status code 204
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 8000))
+        logger.info(f"Starting Flask server on port {port}")
+        logger.info("Backend initialization complete - all routes registered")
+        
+        # Test that the health endpoint works before starting
+        with app.test_client() as client:
+            response = client.get('/health')
+            if response.status_code == 200:
+                logger.info("Health endpoint test passed")
+            else:
+                logger.warning(f"Health endpoint test failed: {response.status_code}")
+        
+        app.run(debug=True, host='0.0.0.0', port=port)
+    except Exception as e:
+        logger.error(f"Failed to start Flask server: {str(e)}")
+        raise

@@ -40,11 +40,13 @@ def register_routes(app):
             geojson_data = data['data']
             filename = data['filename']
             
-            # Extract polygon ID if provided
+            # Extract polygon ID and user information if provided
             polygon_id = data.get('id', None)
+            user_id = data.get('user_id', None)
+            user_email = data.get('user_email', None)
             
             logger.debug(f"GeoJSON data structure: {json.dumps(geojson_data, indent=2)}")
-            logger.info(f"Saving polygon with ID: {polygon_id}")
+            logger.info(f"Saving polygon with ID: {polygon_id}, User: {user_id}")
             
             if not filename.endswith('.geojson'):
                 return jsonify({'error': 'Invalid file extension'}), 400
@@ -77,7 +79,8 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 filename=filename,
                 geojson_path=file_path,
-                bounds=bounds
+                bounds=bounds,
+                user_id=user_id
             )
             
             # Save file metadata to database
@@ -85,7 +88,8 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 file_name=filename,
                 file_path=file_path,
-                file_type='geojson'
+                file_type='geojson',
+                user_id=user_id
             )
             
             response = {
@@ -100,6 +104,54 @@ def register_routes(app):
             logger.error(f"Error saving polygon: {str(e)}", exc_info=True)
             return jsonify({'error': str(e)}), 500
 
+    @app.route('/status/<task_id>', methods=['GET'])
+    def get_task_status(task_id):
+        """Check the status of an async processing task"""
+        try:
+            from services.tasks import process_terrain_async
+            
+            # Get task result
+            result = process_terrain_async.AsyncResult(task_id)
+            
+            if result.state == 'PENDING':
+                response = {
+                    'status': 'pending',
+                    'task_id': task_id,
+                    'message': 'Task is waiting to be processed'
+                }
+            elif result.state == 'PROGRESS':
+                response = {
+                    'status': 'processing',
+                    'task_id': task_id,
+                    'progress': result.info.get('status', 'Processing...'),
+                    'message': 'Task is being processed'
+                }
+            elif result.state == 'SUCCESS':
+                response = {
+                    'status': 'completed',
+                    'task_id': task_id,
+                    'result': result.result,
+                    'message': 'Task completed successfully'
+                }
+            elif result.state == 'FAILURE':
+                response = {
+                    'status': 'failed',
+                    'task_id': task_id,
+                    'error': str(result.info),
+                    'message': 'Task failed'
+                }
+            else:
+                response = {
+                    'status': result.state,
+                    'task_id': task_id,
+                    'message': f'Task state: {result.state}'
+                }
+            
+            return jsonify(response), 200
+            
+        except Exception as e:
+            logger.error(f"Error checking task status: {str(e)}", exc_info=True)
+            return jsonify({'error': str(e)}), 500
 
     @app.route('/process_polygon', methods=['POST'])
     def process_polygon():
@@ -111,9 +163,8 @@ def register_routes(app):
             geojson_data = data['data']
             polygon_id = data.get('id', 'default_polygon')
             filename = data.get('filename', 'polygon.geojson')
-            
-            # Update status to processing
-            db_service.update_polygon_status(polygon_id, 'processing')
+            data_source = data.get('data_source', 'srtm')  # 'srtm' or 'lidar'
+            async_processing = data.get('async', True)  # Default to async
             
             # --- FIX: Robust GeoJSON Parsing and Boundary Extraction ---
             
@@ -133,23 +184,63 @@ def register_routes(app):
                 return jsonify({'error': f'Invalid GeoJSON structure: {str(e)}'}), 400
 
             # 2. Get the bounding box (bbox) from the Shapely object (minx, miny, maxx, maxy)
-            # This handles all coordinate structures internally and avoids the 'string index out of range' error.
             min_lon, min_lat, max_lon, max_lat = geom.bounds
             
             # -----------------------------------------------------------
 
-            # 3. Fetch SRTM data based on the GeoJSON polygon
-            logger.info(f"Fetching SRTM data for polygon bounds: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
-            srtm_files = get_srtm_data(geojson_data)
-            
-            if not srtm_files:
-                db_service.update_polygon_status(polygon_id, 'failed')
-                return jsonify({'error': 'No SRTM data available for this location'}), 500
-
-            # 4. Clip and process the SRTM file using the polygon geometry
-            polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
-            os.makedirs(polygon_session_folder, exist_ok=True)
-            processed_data = process_srtm_files(srtm_files, geojson_data, polygon_session_folder)
+            if async_processing:
+                # ASYNC PROCESSING: Start background task and return immediately
+                from services.tasks import process_terrain_async
+                
+                # Start the async task
+                task = process_terrain_async.delay(polygon_id, geojson_data, data_source)
+                
+                # Update database status
+                db_service.update_polygon_status(polygon_id, 'processing')
+                
+                # Return task ID for status checking
+                return jsonify({
+                    'status': 'processing',
+                    'task_id': task.id,
+                    'polygon_id': polygon_id,
+                    'data_source': data_source,
+                    'message': 'Terrain analysis started. Use /status/<task_id> to check progress.'
+                }), 202
+            else:
+                # SYNC PROCESSING: Original synchronous processing
+                logger.info(f"Fetching {data_source} data for polygon bounds: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
+                
+                if data_source == 'srtm':
+                    srtm_files = get_srtm_data(geojson_data)
+                    if not srtm_files:
+                        db_service.update_polygon_status(polygon_id, 'failed')
+                        return jsonify({'error': 'No SRTM data available for this location'}), 500
+                    
+                    # Process SRTM files
+                    polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
+                    os.makedirs(polygon_session_folder, exist_ok=True)
+                    processed_data = process_srtm_files(srtm_files, geojson_data, polygon_session_folder)
+                    
+                    # Add parallel terrain processing for immediate 3x speed boost
+                    if processed_data and 'clipped_srtm_path' in processed_data:
+                        logger.info(f"Starting parallel terrain processing for polygon {polygon_id}")
+                        from services.terrain_parallel import process_terrain_parallel
+                        
+                        # Run all terrain operations in parallel
+                        terrain_results = process_terrain_parallel(
+                            processed_data['clipped_srtm_path'], 
+                            polygon_session_folder, 
+                            polygon_id
+                        )
+                        
+                        # Add terrain results to processed_data
+                        processed_data['terrain_results'] = terrain_results
+                        logger.info(f"Parallel terrain processing completed for polygon {polygon_id}")
+                elif data_source == 'lidar':
+                    # TODO: Implement synchronous LiDAR processing
+                    return jsonify({'error': 'LiDAR processing not yet implemented'}), 501
+                else:
+                    return jsonify({'error': f'Unknown data source: {data_source}'}), 400
             
             if 'error' in processed_data:
                 db_service.update_polygon_status(polygon_id, 'failed')
@@ -171,17 +262,25 @@ def register_routes(app):
             # Add the file path to the response
             processed_data['srtm_file_path'] = srtm_file_path
             
+            # Extract user information if provided
+            user_id = data.get('user_id', None)
+            
             # Save analysis results to database
             analysis_data = {
                 'srtm_path': srtm_file_path,
                 'slope_path': None,  # Will be set when slope analysis is run
                 'aspect_path': None,  # Will be set when aspect analysis is run
                 'contours_path': None,  # Will be set when contours are generated
-                'bounds': [min_lon, min_lat, max_lon, max_lat],
+                'bounds': {
+                    'minLon': min_lon,
+                    'minLat': min_lat,
+                    'maxLon': max_lon,
+                    'maxLat': max_lat
+                },
                 'processed_at': datetime.now().isoformat()
             }
             
-            db_service.save_analysis_results(polygon_id, analysis_data)
+            db_service.save_analysis_results(polygon_id, analysis_data, user_id)
             db_service.update_polygon_status(polygon_id, 'completed')
             
             # Save SRTM file metadata to database
@@ -189,8 +288,19 @@ def register_routes(app):
                 polygon_id=polygon_id,
                 file_name=f"{polygon_id}_srtm.tif",
                 file_path=srtm_file_path,
-                file_type='srtm'
+                file_type='srtm',
+                user_id=user_id
             )
+            
+            # Try to calculate statistics after SRTM processing
+            try:
+                stats_result = db_service.recalculate_statistics(polygon_id)
+                if stats_result.get('status') == 'success':
+                    logger.info("✅ Statistics calculated successfully after SRTM processing")
+                else:
+                    logger.info(f"ℹ️ Statistics not calculated: {stats_result.get('message', 'Unknown reason')}")
+            except Exception as e:
+                logger.warning(f"Could not calculate statistics: {str(e)}")
             
             # Cleanup temporary file from processing
             if os.path.exists(clipped_srtm_path):

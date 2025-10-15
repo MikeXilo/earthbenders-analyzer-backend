@@ -121,6 +121,16 @@ def register_routes(app):
             
             if slope_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save slope file metadata: {slope_file_result.get('message', 'Unknown error')}")
+            
+            # Try to recalculate statistics if we have all required files
+            try:
+                stats_result = db_service.recalculate_statistics(polygon_id)
+                if stats_result.get('status') == 'success':
+                    logger.info("✅ Statistics recalculated successfully after slope processing")
+                else:
+                    logger.info(f"ℹ️ Statistics not recalculated: {stats_result.get('message', 'Unknown reason')}")
+            except Exception as e:
+                logger.warning(f"Could not recalculate statistics: {str(e)}")
                 
             return jsonify(slope_viz)
         except Exception as e:
@@ -567,6 +577,16 @@ def register_routes(app):
             
             if aspect_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save aspect file metadata: {aspect_file_result.get('message', 'Unknown error')}")
+            
+            # Try to recalculate statistics if we have all required files
+            try:
+                stats_result = db_service.recalculate_statistics(polygon_id)
+                if stats_result.get('status') == 'success':
+                    logger.info("✅ Statistics recalculated successfully after aspect processing")
+                else:
+                    logger.info(f"ℹ️ Statistics not recalculated: {stats_result.get('message', 'Unknown reason')}")
+            except Exception as e:
+                logger.warning(f"Could not recalculate statistics: {str(e)}")
                 
             return jsonify(aspect_viz)
         except Exception as e:
