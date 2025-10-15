@@ -134,12 +134,13 @@ def check_lidar_availability():
 @lidar_bp.route('/api/lidar/process', methods=['POST'])
 def process_lidar_terrain():
     """
-    Process terrain analysis using LiDAR data
+    Process terrain analysis using LiDAR data (90,000 small GeoTIFF tiles)
     
     Expected request body:
     {
         "polygon": GeoJSON geometry,
-        "tiles": list of tile paths
+        "lidar_directory": "/app/data/LidarPt",  // Directory containing 90,000 tiles
+        "polygon_id": "unique_id"
     }
     """
     try:
@@ -151,22 +152,35 @@ def process_lidar_terrain():
             }), 400
         
         polygon_geometry = data['polygon']
-        tiles = data.get('tiles', [])
+        lidar_directory = data.get('lidar_directory', '/app/data/LidarPt')
+        polygon_id = data.get('polygon_id', 'default_polygon')
         
-        if not tiles:
+        # Create output directory
+        output_dir = f"/app/data/polygon_sessions/{polygon_id}/lidar_results"
+        
+        logger.info(f"Processing LiDAR terrain for polygon {polygon_id}")
+        logger.info(f"LiDAR directory: {lidar_directory}")
+        
+        # Use optimized parallel processing for 90,000 tiles
+        from services.lidar_tile_processor import process_lidar_tiles_parallel
+        
+        results = process_lidar_tiles_parallel(
+            polygon_geometry,
+            lidar_directory,
+            output_dir,
+            polygon_id
+        )
+        
+        if 'error' in results:
             return jsonify({
-                'status': 'error', 
-                'message': 'No LiDAR tiles provided'
-            }), 400
+                'status': 'error',
+                'message': results['error']
+            }), 500
         
-        logger.info(f"Processing LiDAR terrain with {len(tiles)} tiles")
-        
-        # TODO: Implement LiDAR terrain processing
-        # For now, return success message
         return jsonify({
             'status': 'success',
-            'message': 'LiDAR processing not yet implemented',
-            'tiles_used': tiles
+            'message': 'LiDAR processing completed',
+            'results': results
         })
         
     except Exception as e:
