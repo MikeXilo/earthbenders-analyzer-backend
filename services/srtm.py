@@ -412,8 +412,45 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 }
         except Exception as e:
             logger.error(f"Error in polygon masking: {str(e)}", exc_info=True)
+            
+            # CRITICAL FIX: If visualization fails, return partial data (if SRTM file exists)
+            # This allows tasks.py to calculate statistics and prevents the process from failing entirely.
+            if clipped_srtm_path and os.path.exists(clipped_srtm_path):
+                logger.warning(f"Visualization failed for polygon, but clipped SRTM file exists. Returning partial data.")
+                return {
+                    'clipped_srtm_path': clipped_srtm_path,
+                    'visualization_path': None,
+                    'image': None,
+                    'min_height': None,
+                    'max_height': None,
+                    'bounds': {
+                        'north': polygon.bounds[3],
+                        'south': polygon.bounds[1],
+                        'east': polygon.bounds[2],
+                        'west': polygon.bounds[0]
+                    }
+                }
+            
             return None
             
     except Exception as e:
         logger.error(f"Error processing SRTM files: {str(e)}", exc_info=True)
+        
+        # CRITICAL FIX: If processing fails but clipped file exists, return partial data
+        if 'clipped_srtm_path' in locals() and clipped_srtm_path and os.path.exists(clipped_srtm_path):
+            logger.warning(f"SRTM processing failed, but clipped file exists. Returning partial data.")
+            return {
+                'clipped_srtm_path': clipped_srtm_path,
+                'visualization_path': None,
+                'image': None,
+                'min_height': None,
+                'max_height': None,
+                'bounds': {
+                    'north': polygon.bounds[3] if 'polygon' in locals() else 0,
+                    'south': polygon.bounds[1] if 'polygon' in locals() else 0,
+                    'east': polygon.bounds[2] if 'polygon' in locals() else 0,
+                    'west': polygon.bounds[0] if 'polygon' in locals() else 0
+                }
+            }
+        
         return None 

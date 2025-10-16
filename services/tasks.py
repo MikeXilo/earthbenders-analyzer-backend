@@ -76,16 +76,43 @@ def process_srtm_terrain_async(task, polygon_id, geojson_data):
             polygon_id
         )
         
-        # Step 4: Update database with results
+        # Step 4: Save analysis results to database
         task.update_state(state='PROGRESS', meta={'status': 'Saving results'})
-        db_service.update_polygon_status(polygon_id, 'completed')
+        
+        # Prepare analysis data for database
+        analysis_data = {
+            'srtm_path': srtm_results.get('clipped_srtm_path'),
+            'visualization_path': srtm_results.get('visualization_path'),
+            'slope_path': terrain_results.get('slope', {}).get('path'),
+            'aspect_path': terrain_results.get('aspect', {}).get('path'),
+            'contours_path': terrain_results.get('contours', {}).get('path'),
+            'statistics': {
+                'min_height': srtm_results.get('min_height'),
+                'max_height': srtm_results.get('max_height'),
+                'bounds': srtm_results.get('bounds')
+            }
+        }
+        
+        # CRITICAL FIX: Save analysis results to database
+        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
+        
+        if save_result and save_result.get('status') == 'success':
+            # Set status to 'completed' only on successful save
+            db_service.update_polygon_status(polygon_id, 'completed')
+            logger.info(f"✅ Analysis results saved successfully for {polygon_id}. Status set to 'completed'.")
+        else:
+            # Log the failure and set a dedicated error status
+            error_message = save_result.get('message', 'save_analysis_results returned None/False.') if save_result else 'save_analysis_results returned None/False.'
+            logger.error(f"❌ FAILED to save analysis results for {polygon_id}: {error_message}. Status set to 'analysis_save_failed'.")
+            db_service.update_polygon_status(polygon_id, 'analysis_save_failed')
         
         # Return results
         return {
             'status': 'completed',
             'polygon_id': polygon_id,
             'srtm_results': srtm_results,
-            'terrain_results': terrain_results
+            'terrain_results': terrain_results,
+            'analysis_saved': save_result.get('status') == 'success' if save_result else False
         }
         
     except Exception as e:
@@ -111,15 +138,39 @@ def process_lidar_terrain_async(task, polygon_id, geojson_data):
         task.update_state(state='PROGRESS', meta={'status': 'Running LiDAR analysis'})
         terrain_results = process_lidar_terrain_parallel(vrt_path, geojson_data, polygon_id)
         
-        # Step 4: Update database with results
+        # Step 4: Save analysis results to database
         task.update_state(state='PROGRESS', meta={'status': 'Saving results'})
-        db_service.update_polygon_status(polygon_id, 'completed')
+        
+        # Prepare analysis data for database
+        analysis_data = {
+            'srtm_path': terrain_results.get('elevation', {}).get('path'),
+            'slope_path': terrain_results.get('slope', {}).get('path'),
+            'aspect_path': terrain_results.get('aspect', {}).get('path'),
+            'contours_path': terrain_results.get('contours', {}).get('path'),
+            'statistics': {
+                'data_source': 'lidar'
+            }
+        }
+        
+        # CRITICAL FIX: Save analysis results to database
+        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
+        
+        if save_result and save_result.get('status') == 'success':
+            # Set status to 'completed' only on successful save
+            db_service.update_polygon_status(polygon_id, 'completed')
+            logger.info(f"✅ Analysis results saved successfully for {polygon_id}. Status set to 'completed'.")
+        else:
+            # Log the failure and set a dedicated error status
+            error_message = save_result.get('message', 'save_analysis_results returned None/False.') if save_result else 'save_analysis_results returned None/False.'
+            logger.error(f"❌ FAILED to save analysis results for {polygon_id}: {error_message}. Status set to 'analysis_save_failed'.")
+            db_service.update_polygon_status(polygon_id, 'analysis_save_failed')
         
         return {
             'status': 'completed',
             'polygon_id': polygon_id,
             'data_source': 'lidar',
-            'terrain_results': terrain_results
+            'terrain_results': terrain_results,
+            'analysis_saved': save_result.get('status') == 'success' if save_result else False
         }
         
     except Exception as e:
