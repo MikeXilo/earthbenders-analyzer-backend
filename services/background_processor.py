@@ -13,6 +13,7 @@ from services.terrain import (
     generate_contours
 )
 from services.database import DatabaseService
+from services.statistics import calculate_terrain_statistics
 from concurrent.futures import ThreadPoolExecutor
 import os
 import json
@@ -25,7 +26,7 @@ db_service = DatabaseService()
 # Global task status tracking
 task_status = {}
 
-def process_terrain_background(polygon_id: str, geojson_data: Dict[str, Any], data_source: str = 'srtm') -> str:
+def run_terrain_analysis(polygon_id: str, geojson_data: Dict[str, Any], data_source: str = 'srtm') -> str:
     """
     Start background terrain processing
     
@@ -88,7 +89,7 @@ def _process_terrain_worker(task_id: str, polygon_id: str, geojson_data: Dict[st
         raise
 
 def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str, Any]):
-    """Process SRTM terrain data"""
+    """Process SRTM terrain data - CRITICAL: Always updates database status"""
     try:
         # Step 1: Fetch SRTM data
         task_status[task_id]['message'] = 'Fetching SRTM data'
@@ -98,7 +99,7 @@ def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str,
         if not srtm_files:
             raise ValueError("No SRTM data available for the specified area")
         
-        # Step 2: Process SRTM files
+        # Step 2: Process SRTM files (now returns partial data on visualization failure)
         task_status[task_id]['message'] = 'Processing SRTM files'
         task_status[task_id]['progress'] = 40
         
@@ -115,9 +116,17 @@ def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str,
             polygon_id
         )
         
-        # Step 4: Save analysis results to database
-        task_status[task_id]['message'] = 'Saving results'
-        task_status[task_id]['progress'] = 80
+        # Step 4: Calculate comprehensive statistics
+        task_status[task_id]['message'] = 'Calculating statistics'
+        task_status[task_id]['progress'] = 75
+        
+        # Calculate terrain statistics using the statistics service
+        statistics = calculate_terrain_statistics(
+            srtm_path=srtm_results.get('clipped_srtm_path'),
+            slope_path=terrain_results.get('slope', {}).get('path'),
+            aspect_path=terrain_results.get('aspect', {}).get('path'),
+            bounds=srtm_results.get('bounds', {})
+        )
         
         # Prepare analysis data for database
         analysis_data = {
@@ -126,12 +135,12 @@ def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str,
             'slope_path': terrain_results.get('slope', {}).get('path'),
             'aspect_path': terrain_results.get('aspect', {}).get('path'),
             'contours_path': terrain_results.get('contours', {}).get('path'),
-            'statistics': {
-                'min_height': srtm_results.get('min_height'),
-                'max_height': srtm_results.get('max_height'),
-                'bounds': srtm_results.get('bounds')
-            }
+            'statistics': statistics
         }
+        
+        # Step 5: Save analysis results to database
+        task_status[task_id]['message'] = 'Saving results'
+        task_status[task_id]['progress'] = 80
         
         # Save analysis results to database
         save_result = db_service.save_analysis_results(polygon_id, analysis_data)
@@ -151,10 +160,10 @@ def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str,
                 'analysis_saved': True
             }
         else:
-            # Log the failure and set a dedicated error status
+            # CRITICAL: Log the failure and set a dedicated error status
             error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
-            logger.error(f"❌ FAILED to save analysis results for {polygon_id}: {error_message}")
-            db_service.update_polygon_status(polygon_id, 'analysis_save_failed')
+            logger.error(f"❌ CRITICAL: FAILED to save analysis results for {polygon_id}: {error_message}")
+            db_service.update_polygon_status(polygon_id, 'failed')  # Use 'failed' instead of 'analysis_save_failed'
             
             task_status[task_id]['status'] = 'FAILURE'
             task_status[task_id]['message'] = f'Database save failed: {error_message}'

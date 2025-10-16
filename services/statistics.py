@@ -26,6 +26,11 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
     try:
         logger.info(f"Calculating terrain statistics for files: {srtm_path}, {slope_path}, {aspect_path}")
         
+        # 🚨 CRITICAL FIX: Ensure bounds is a dict, or initialize to empty
+        if bounds is None:
+            bounds = {}
+            logger.warning("Bounds were not provided to calculate_terrain_statistics, defaulting to empty dict.")
+        
         # Check if SRTM file exists (required)
         if not os.path.exists(srtm_path):
             logger.error(f"SRTM file not found: {srtm_path}")

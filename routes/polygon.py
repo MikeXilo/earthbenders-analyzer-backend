@@ -15,6 +15,7 @@ from services.terrain import calculate_centroid
 from services.database import DatabaseService  # New import
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import save_geojson
+from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -192,10 +193,10 @@ def register_routes(app):
 
             if async_processing:
                 # SIMPLE BACKGROUND PROCESSING: Start background thread and return immediately
-                from services.background_processor import process_terrain_background
+                from services.background_processor import run_terrain_analysis
                 
                 # Start the background task
-                task_id = process_terrain_background(polygon_id, geojson_data, data_source)
+                task_id = run_terrain_analysis(polygon_id, geojson_data, data_source)
                 
                 # Return task ID for status checking
                 return jsonify({
