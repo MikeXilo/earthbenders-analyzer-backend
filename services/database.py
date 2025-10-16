@@ -47,6 +47,7 @@ class DatabaseService:
     
     def save_polygon_metadata(self, polygon_id: str, filename: str, 
                             geojson_path: str, bounds: Dict[str, float],
+                            geometry: Optional[Dict[str, Any]] = None,
                             user_id: Optional[str] = None) -> Dict[str, Any]:
         """Save polygon metadata to database"""
         if not self.enabled:
@@ -61,12 +62,13 @@ class DatabaseService:
             
             # Insert polygon metadata
             cursor.execute("""
-                INSERT INTO polygons (id, name, filename, geojson_path, bounds, status, user_id, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO polygons (id, name, filename, geojson_path, bounds, geometry, status, user_id, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (id) DO UPDATE SET
                     filename = EXCLUDED.filename,
                     geojson_path = EXCLUDED.geojson_path,
                     bounds = EXCLUDED.bounds,
+                    geometry = EXCLUDED.geometry,
                     updated_at = NOW()
             """, (
                 polygon_id,
@@ -74,6 +76,7 @@ class DatabaseService:
                 filename,
                 geojson_path,
                 json.dumps(bounds) if bounds else None,
+                json.dumps(geometry) if geometry else None,
                 'pending',
                 user_id
             ))

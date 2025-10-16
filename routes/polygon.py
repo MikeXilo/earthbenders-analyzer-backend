@@ -83,6 +83,7 @@ def register_routes(app):
                 filename=filename,
                 geojson_path=file_path,
                 bounds=bounds,
+                geometry=geometry_data,  # Store geometry directly in database
                 user_id=user_id
             )
             

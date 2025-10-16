@@ -233,6 +233,7 @@ def register_routes(app):
                         p.name as polygon_name,
                         p.status as polygon_status,
                         p.bounds as polygon_bounds,
+                        p.geometry as polygon_geometry,
                         p.geojson_path
                     FROM analyses a
                     LEFT JOIN polygons p ON a.polygon_id = p.id
@@ -275,9 +276,20 @@ def register_routes(app):
                     'drainage': row['drainage_path']
                 }
                 
-                # Load polygon geometry from GeoJSON file
+                # Load polygon geometry from database first, then fallback to file
                 polygon_geometry = None
-                if row['geojson_path']:
+                
+                # Try to get geometry from database first
+                if row['polygon_geometry']:
+                    try:
+                        polygon_geometry = json.loads(row['polygon_geometry']) if isinstance(row['polygon_geometry'], str) else row['polygon_geometry']
+                        logger.info(f"Loaded polygon geometry from database for project {project_id}")
+                    except Exception as e:
+                        logger.warning(f"Could not parse polygon geometry from database: {str(e)}")
+                        polygon_geometry = None
+                
+                # Fallback to loading from GeoJSON file if not in database
+                if not polygon_geometry and row['geojson_path']:
                     try:
                         geojson_file_path = os.path.join('/app/data', row['geojson_path'])
                         if os.path.exists(geojson_file_path):
@@ -288,10 +300,11 @@ def register_routes(app):
                                     polygon_geometry = geojson_data.get('geometry')
                                 else:
                                     polygon_geometry = geojson_data
+                            logger.info(f"Loaded polygon geometry from file for project {project_id}")
                         else:
                             logger.warning(f"GeoJSON file not found: {geojson_file_path}")
                     except Exception as e:
-                        logger.warning(f"Could not load polygon geometry for project {project_id}: {str(e)}")
+                        logger.warning(f"Could not load polygon geometry from file for project {project_id}: {str(e)}")
                         polygon_geometry = None
                 
                 project = {
