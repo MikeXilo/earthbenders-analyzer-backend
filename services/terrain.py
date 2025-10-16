@@ -15,9 +15,16 @@ from utils.config import SAVE_DIRECTORY
 
 logger = logging.getLogger(__name__)
 
-# Initialize WhiteboxTools
-wbt = WhiteboxTools()
-wbt.verbose = False
+# Initialize WhiteboxTools lazily to avoid worker conflicts
+wbt = None
+
+def get_whitebox_tools():
+    """Get WhiteboxTools instance, initializing lazily to avoid worker conflicts"""
+    global wbt
+    if wbt is None:
+        wbt = WhiteboxTools()
+        wbt.verbose = False
+    return wbt
 
 def calculate_slopes(input_file_path, output_file_path):
     """
@@ -32,6 +39,7 @@ def calculate_slopes(input_file_path, output_file_path):
     """
     try:
         # Set the working directory for WhiteboxTools
+        wbt = get_whitebox_tools()
         wbt.set_working_dir(os.path.dirname(output_file_path))
         
         # Calculate slope in percent (not degrees)
@@ -310,9 +318,11 @@ def calculate_geomorphons(input_file_path, output_file_path, search=50, threshol
     """
     try:
         # Set the working directory for WhiteboxTools
+        wbt = get_whitebox_tools()
         wbt.set_working_dir(os.path.dirname(output_file_path))
         
         logger.info(f"Calculating geomorphons from {input_file_path}...")
+        wbt = get_whitebox_tools()
         wbt.geomorphons(
             dem=str(input_file_path), 
             output=str(output_file_path),
@@ -476,9 +486,11 @@ def calculate_hypsometrically_tinted_hillshade(input_file_path, output_file_path
     """
     try:
         # Set the working directory for WhiteboxTools
+        wbt = get_whitebox_tools()
         wbt.set_working_dir(os.path.dirname(output_file_path))
         
         logger.info(f"Calculating hypsometrically tinted hillshade from {input_file_path}...")
+        wbt = get_whitebox_tools()
         wbt.hypsometrically_tinted_hillshade(
             dem=str(input_file_path), 
             output=str(output_file_path),
@@ -647,12 +659,14 @@ def calculate_drainage_network(input_file_path, output_file_path):
     """
     try:
         # Set the working directory for WhiteboxTools
+        wbt = get_whitebox_tools()
         wbt.set_working_dir(os.path.dirname(output_file_path))
         
         logger.info(f"Calculating drainage network from {input_file_path}...")
         
         # Step 1: Fill depressions to remove sinks
         filled_dem_path = os.path.join(os.path.dirname(output_file_path), "filled_dem.tif")
+        wbt = get_whitebox_tools()
         wbt.fill_depressions(
             dem=str(input_file_path), 
             output=str(filled_dem_path)
@@ -663,6 +677,7 @@ def calculate_drainage_network(input_file_path, output_file_path):
             return False
         
         # Step 2: Calculate D8 flow accumulation
+        wbt = get_whitebox_tools()
         wbt.d8_flow_accumulation(
             i=str(filled_dem_path), 
             output=str(output_file_path)
@@ -701,11 +716,13 @@ def calculate_aspect(input_file_path, output_file_path, convention="azimuth", gr
     """
     try:
         # Set the working directory for WhiteboxTools
+        wbt = get_whitebox_tools()
         wbt.set_working_dir(os.path.dirname(output_file_path))
         
         logger.info(f"Calculating aspect from {input_file_path}...")
         
         # Use WhiteboxTools aspect function
+        wbt = get_whitebox_tools()
         wbt.aspect(
             dem=str(input_file_path), 
             output=str(output_file_path)

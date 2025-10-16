@@ -27,9 +27,16 @@ import geopandas as gpd
 # Import our new TileServer
 from tile_server import TileServer
 
-# Initialize WhiteboxTools
-wbt = WhiteboxTools()
-wbt.verbose = False
+# Initialize WhiteboxTools lazily to avoid worker conflicts
+wbt = None
+
+def get_whitebox_tools():
+    """Get WhiteboxTools instance, initializing lazily to avoid worker conflicts"""
+    global wbt
+    if wbt is None:
+        wbt = WhiteboxTools()
+        wbt.verbose = False
+    return wbt
 
 # Configure logging first
 logging.basicConfig(level=logging.DEBUG, 
