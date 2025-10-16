@@ -164,7 +164,7 @@ def register_routes(app):
             polygon_id = data.get('id', 'default_polygon')
             filename = data.get('filename', 'polygon.geojson')
             data_source = data.get('data_source', 'srtm')  # 'srtm' or 'lidar'
-            async_processing = data.get('async', False)  # Default to sync since Celery worker not running
+            async_processing = data.get('async', True)  # Default to async - proper infrastructure will be deployed
             
             # --- FIX: Robust GeoJSON Parsing and Boundary Extraction ---
             
