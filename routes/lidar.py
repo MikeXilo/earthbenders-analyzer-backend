@@ -134,12 +134,11 @@ def check_lidar_availability():
 @lidar_bp.route('/api/lidar/process', methods=['POST'])
 def process_lidar_terrain():
     """
-    Process terrain analysis using LiDAR data (90,000 small GeoTIFF tiles)
+    Process terrain analysis using LiDAR data with CRS transformation
     
     Expected request body:
     {
         "polygon": GeoJSON geometry,
-        "lidar_directory": "/app/data/LidarPt",  // Directory containing 90,000 tiles
         "polygon_id": "unique_id"
     }
     """
@@ -152,24 +151,14 @@ def process_lidar_terrain():
             }), 400
         
         polygon_geometry = data['polygon']
-        lidar_directory = data.get('lidar_directory', '/app/data/LidarPt')
         polygon_id = data.get('polygon_id', 'default_polygon')
         
-        # Create output directory
-        output_dir = f"/app/data/polygon_sessions/{polygon_id}/lidar_results"
-        
         logger.info(f"Processing LiDAR terrain for polygon {polygon_id}")
-        logger.info(f"LiDAR directory: {lidar_directory}")
         
-        # Use optimized parallel processing for 90,000 tiles
-        from services.lidar_tile_processor import process_lidar_tiles_parallel
+        # Use new independent LIDAR processor with CRS transformation
+        from services.lidar_processor import process_lidar_dem
         
-        results = process_lidar_tiles_parallel(
-            polygon_geometry,
-            lidar_directory,
-            output_dir,
-            polygon_id
-        )
+        results = process_lidar_dem(polygon_geometry, polygon_id)
         
         if 'error' in results:
             return jsonify({
