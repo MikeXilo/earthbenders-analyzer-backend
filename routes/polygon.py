@@ -267,6 +267,22 @@ def register_routes(app):
             # Extract user information if provided
             user_id = data.get('user_id', None)
             
+            # Calculate statistics for the SRTM data
+            from services.statistics import calculate_terrain_statistics
+            
+            # Calculate comprehensive statistics
+            statistics = calculate_terrain_statistics(
+                srtm_path=srtm_file_path,
+                slope_path=None,  # No slope data yet
+                aspect_path=None,  # No aspect data yet
+                bounds={
+                    'west': min_lon,
+                    'east': max_lon,
+                    'north': max_lat,
+                    'south': min_lat
+                }
+            )
+            
             # Save analysis results to database
             analysis_data = {
                 'srtm_path': srtm_file_path,
@@ -279,6 +295,7 @@ def register_routes(app):
                     'maxLon': max_lon,
                     'maxLat': max_lat
                 },
+                'statistics': statistics,  # Include calculated statistics
                 'processed_at': datetime.now().isoformat()
             }
             
@@ -294,15 +311,7 @@ def register_routes(app):
                 user_id=user_id
             )
             
-            # Try to calculate statistics after SRTM processing
-            try:
-                stats_result = db_service.recalculate_statistics(polygon_id)
-                if stats_result.get('status') == 'success':
-                    logger.info("✅ Statistics calculated successfully after SRTM processing")
-                else:
-                    logger.info(f"ℹ️ Statistics not calculated: {stats_result.get('message', 'Unknown reason')}")
-            except Exception as e:
-                logger.warning(f"Could not calculate statistics: {str(e)}")
+            # Statistics are now calculated above and included in analysis_data
             
             # Cleanup temporary file from processing
             if os.path.exists(clipped_srtm_path):
