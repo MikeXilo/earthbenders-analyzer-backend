@@ -2,7 +2,7 @@
 Async task definitions for terrain processing
 """
 import logging
-from celery import current_task
+from celery_config import app as celery_app
 from services.srtm import get_srtm_data, process_srtm_files
 from services.terrain import (
     calculate_slopes, calculate_aspect, calculate_geomorphons,
@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 # Initialize database service
 db_service = DatabaseService()
 
-@current_task.task(bind=True, name='services.tasks.process_terrain_async')
+@celery_app.task(bind=True, name='services.tasks.process_terrain_async')
 def process_terrain_async(self, polygon_id, geojson_data, data_source='srtm'):
     """
     Async terrain processing task

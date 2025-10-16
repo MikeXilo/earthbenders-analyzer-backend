@@ -47,7 +47,7 @@ app.conf.update(
 )
 
 # Import tasks to register them
-from services.tasks import process_terrain_async, process_lidar_async
+from services.tasks import process_terrain_async
 
 if __name__ == '__main__':
     app.start()

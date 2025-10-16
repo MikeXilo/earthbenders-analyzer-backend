@@ -27,6 +27,9 @@ import geopandas as gpd
 # Import our new TileServer
 from tile_server import TileServer
 
+# Initialize Celery for async processing
+from celery_config import app as celery_app
+
 # Initialize WhiteboxTools
 wbt = WhiteboxTools()
 wbt.verbose = False
