@@ -106,45 +106,47 @@ def register_routes(app):
 
     @app.route('/status/<task_id>', methods=['GET'])
     def get_task_status(task_id):
-        """Check the status of an async processing task"""
+        """Check the status of a background processing task"""
         try:
-            from services.tasks import process_terrain_async
+            from services.background_processor import get_task_status
             
-            # Get task result
-            result = process_terrain_async.AsyncResult(task_id)
+            # Get task status from background processor
+            status = get_task_status(task_id)
             
-            if result.state == 'PENDING':
-                response = {
-                    'status': 'pending',
+            if not status:
+                return jsonify({
+                    'status': 'not_found',
                     'task_id': task_id,
-                    'message': 'Task is waiting to be processed'
-                }
-            elif result.state == 'PROGRESS':
+                    'message': 'Task not found or expired'
+                }), 404
+            
+            # Map internal status to API response
+            if status['status'] == 'PROGRESS':
                 response = {
                     'status': 'processing',
                     'task_id': task_id,
-                    'progress': result.info.get('status', 'Processing...'),
-                    'message': 'Task is being processed'
+                    'progress': status.get('progress', 0),
+                    'message': status.get('message', 'Processing...')
                 }
-            elif result.state == 'SUCCESS':
+            elif status['status'] == 'SUCCESS':
                 response = {
                     'status': 'completed',
                     'task_id': task_id,
-                    'result': result.result,
+                    'result': status.get('results', {}),
                     'message': 'Task completed successfully'
                 }
-            elif result.state == 'FAILURE':
+            elif status['status'] == 'FAILURE':
                 response = {
                     'status': 'failed',
                     'task_id': task_id,
-                    'error': str(result.info),
+                    'error': status.get('message', 'Task failed'),
                     'message': 'Task failed'
                 }
             else:
                 response = {
-                    'status': result.state,
+                    'status': status['status'].lower(),
                     'task_id': task_id,
-                    'message': f'Task state: {result.state}'
+                    'message': status.get('message', f'Task state: {status["status"]}')
                 }
             
             return jsonify(response), 200
@@ -189,19 +191,16 @@ def register_routes(app):
             # -----------------------------------------------------------
 
             if async_processing:
-                # ASYNC PROCESSING: Start background task and return immediately
-                from services.tasks import process_terrain_async
+                # SIMPLE BACKGROUND PROCESSING: Start background thread and return immediately
+                from services.background_processor import process_terrain_background
                 
-                # Start the async task
-                task = process_terrain_async.delay(polygon_id, geojson_data, data_source)
-                
-                # Update database status
-                db_service.update_polygon_status(polygon_id, 'processing')
+                # Start the background task
+                task_id = process_terrain_background(polygon_id, geojson_data, data_source)
                 
                 # Return task ID for status checking
                 return jsonify({
                     'status': 'processing',
-                    'task_id': task.id,
+                    'task_id': task_id,
                     'polygon_id': polygon_id,
                     'data_source': data_source,
                     'message': 'Terrain analysis started. Use /status/<task_id> to check progress.'
