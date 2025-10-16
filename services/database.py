@@ -174,6 +174,69 @@ class DatabaseService:
                 conn.close()
             return {'status': 'error', 'message': str(e)}
     
+    def get_analysis_record(self, polygon_id: str) -> Optional[Dict[str, Any]]:
+        """Get analysis record by polygon ID"""
+        if not self.enabled:
+            return None
+        
+        conn = self._get_connection()
+        if not conn:
+            return None
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT a.*, p.status as polygon_status, p.bounds, p.user_id
+                FROM analyses a
+                JOIN polygons p ON a.polygon_id = p.id
+                WHERE a.polygon_id = %s
+            """, (polygon_id,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if result:
+                return dict(result)
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting analysis record: {str(e)}")
+            if conn:
+                conn.close()
+            return None
+    
+    def get_polygon_metadata(self, polygon_id: str) -> Optional[Dict[str, Any]]:
+        """Get polygon metadata by ID"""
+        if not self.enabled:
+            return None
+        
+        conn = self._get_connection()
+        if not conn:
+            return None
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT id, name, filename, status, bounds, user_id, created_at
+                FROM polygons
+                WHERE id = %s
+            """, (polygon_id,))
+            
+            result = cursor.fetchone()
+            cursor.close()
+            conn.close()
+            
+            if result:
+                return dict(result)
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting polygon metadata: {str(e)}")
+            if conn:
+                conn.close()
+            return None
+    
     def update_analysis_paths(self, polygon_id: str, analysis_data: Dict[str, Any]) -> Dict[str, Any]:
         """Update analysis record with new analysis paths"""
         if not self.enabled:

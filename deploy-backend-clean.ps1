@@ -59,10 +59,7 @@ try {
         Copy-Item -Path "env.example" -Destination "$tempDir\" -Force
     }
     
-    # Copy celery_config.py if it exists
-    if (Test-Path "celery_config.py") {
-        Copy-Item -Path "celery_config.py" -Destination "$tempDir\" -Force
-    }
+    # Celery removed - no longer needed
     
     # Copy routes directory
     if (Test-Path "routes") {
