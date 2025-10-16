@@ -35,12 +35,15 @@ Tables are created automatically on startup via `create_tables.py`:
 - `users` - User management (future)
 
 ### **Current Status: Production Ready ✅**
-- **Database Integration:** Neon PostgreSQL fully operational
+- **Database Integration:** Neon PostgreSQL fully operational with geometry storage
 - **File Storage:** Railway volumes with optimized SRTM cache structure
 - **SRTM Processing:** Optimized workflow - check cache → download if needed → clip to polygon
+- **LIDAR Processing:** High-resolution DEM with WGS84-first approach for consistent analysis
 - **API Endpoints:** All core operations tested and working
 - **Error Handling:** Robust error management implemented
 - **Performance:** SRTM tiles cached for reuse across sessions
+- **Background Processing:** Simple threading-based async processing (Celery-free)
+- **Polygon Geometry:** Database-first storage with file fallback for project viewing
 
 ## 📊 API Endpoints
 
@@ -187,6 +190,7 @@ CREATE TABLE polygons (
     srtm_path TEXT,
     slope_path TEXT,
     bounds JSONB,
+    geometry JSONB,  -- NEW: Stores polygon geometry directly in database
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),

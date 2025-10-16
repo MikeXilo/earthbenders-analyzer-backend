@@ -32,6 +32,7 @@ def create_tables():
                 srtm_path TEXT,
                 slope_path TEXT,
                 bounds JSONB,
+                geometry JSONB,
                 status VARCHAR(50) DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
@@ -91,6 +92,7 @@ def create_tables():
         # Create indexes for better performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_polygons_status ON polygons(status);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_polygons_user_id ON polygons(user_id);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_polygons_geometry ON polygons USING GIN (geometry);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_storage_polygon_id ON file_storage(polygon_id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_file_storage_file_type ON file_storage(file_type);")
         print("✅ Created database indexes")
