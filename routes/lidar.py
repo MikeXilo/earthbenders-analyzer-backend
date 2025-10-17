@@ -153,7 +153,8 @@ def process_lidar_terrain():
         polygon_geometry = data['polygon']
         polygon_id = data.get('polygon_id', 'default_polygon')
         
-        logger.info(f"Processing LiDAR terrain for polygon {polygon_id}")
+        logger.info(f"🚀 LIDAR ROUTE CALLED - Processing LiDAR terrain for polygon {polygon_id}")
+        logger.info(f"📊 LIDAR Request data: {data}")
         
         # PHASE 1: LIDAR-specific preparation (CRS conversion and clipping)
         logger.info("PHASE 1: Starting LIDAR data preparation (merge, reproject, clip)")
