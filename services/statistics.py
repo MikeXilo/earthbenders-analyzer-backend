@@ -99,23 +99,30 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         # Import datetime for processed_at
         from datetime import datetime
         
+        # Helper function to clean NaN values for PostgreSQL JSON compatibility
+        def clean_nan_values(value):
+            """Convert NaN values to None for PostgreSQL JSON compatibility"""
+            if isinstance(value, float) and np.isnan(value):
+                return None
+            return value
+        
         statistics = {
             'bounds': bounds,
-            'relief': round(relief, 2),
-            'area_km2': round(area_km2, 4),
-            'slope_max': round(slope_max, 2),
-            'slope_min': round(slope_min, 2),
-            'slope_std': round(slope_std, 2),
-            'slope_mean': round(slope_mean, 2),
-            'aspect_mean': round(aspect_mean, 2),
+            'relief': clean_nan_values(round(relief, 2)),
+            'area_km2': clean_nan_values(round(area_km2, 4)),
+            'slope_max': clean_nan_values(round(slope_max, 2)),
+            'slope_min': clean_nan_values(round(slope_min, 2)),
+            'slope_std': clean_nan_values(round(slope_std, 2)),
+            'slope_mean': clean_nan_values(round(slope_mean, 2)),
+            'aspect_mean': clean_nan_values(round(aspect_mean, 2)),
             'aspect_path': aspect_path,
             'pixel_count': pixel_count,
             'processed_at': datetime.now().isoformat(),
-            'elevation_max': round(elevation_max, 2),
-            'elevation_min': round(elevation_min, 2),
-            'elevation_mean': round(elevation_mean, 2),
+            'elevation_max': clean_nan_values(round(elevation_max, 2)),
+            'elevation_min': clean_nan_values(round(elevation_min, 2)),
+            'elevation_mean': clean_nan_values(round(elevation_mean, 2)),
             'aspect_direction': aspect_direction,
-            'terrain_ruggedness': round(terrain_ruggedness, 2)
+            'terrain_ruggedness': clean_nan_values(round(terrain_ruggedness, 2))
         }
         
         logger.info(f"Calculated statistics: {statistics}")
