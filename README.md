@@ -1,5 +1,7 @@
 # Earthbenders Analyzer Backend
 
+....
+
 A Flask-based geospatial analysis backend that processes polygon data, generates terrain analysis, and manages file storage with database integration.
 
 ## 🏗️ Architecture

@@ -268,14 +268,7 @@ class USGSDEMProcessor:
             
             with rasterio.open(dem_path) as src:
                 # Clip the DEM with the polygon
-                out_image, out_transform = mask(src, polygon_geom, crop=True, nodata=np.nan)
-                
-                # Additional cleanup for USGS DEM data (like Portuguese LiDAR)
-                # Ensure NoData values are properly set to NaN
-                out_image = out_image.astype(np.float32)
-                out_image[out_image == 0] = np.nan
-                out_image[out_image == -9999.0] = np.nan
-                out_image[out_image == -32768] = np.nan
+                out_image, out_transform = mask(src, polygon_geom, crop=True, nodata=-9999.0)
                 
                 # Update metadata
                 out_meta = src.meta.copy()
@@ -284,7 +277,7 @@ class USGSDEMProcessor:
                     "height": out_image.shape[1],
                     "width": out_image.shape[2],
                     "transform": out_transform,
-                    "nodata": np.nan,
+                    "nodata": -9999.0,
                     "compress": "lzw"
                 })
                 

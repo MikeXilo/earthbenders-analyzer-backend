@@ -357,64 +357,27 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                         return (255, 255, 255)  
                 
                 # Apply continuous color ramp
-                # Handle case where data_masked is a scalar (single pixel)
-                if np.isscalar(data_masked):
-                    # Single pixel case
-                    is_valid = True
-                    if hasattr(data_masked, 'mask'):
-                        is_valid = not data_masked.mask
-                    else:
-                        is_valid = not np.isnan(data_masked)
-                    
-                    if is_valid:
-                        valid_pixels += 1
-                        total_elevation += float(data_masked)
-                        # For single pixel, use the elevation directly for coloring
-                        elev_norm = (float(data_masked) - data_min) / (data_max - data_min) if data_max > data_min else 0.5
-                        r, g, b = get_topographic_color(elev_norm)
-                        # Set the single pixel color
-                        if len(rgba.shape) == 3:
-                            rgba[0, 0] = [r, g, b, 255]
+                for i in range(data.shape[0]):
+                    for j in range(data.shape[1]):
+                        # Check for valid data (not masked and not NaN)
+                        is_valid = True
+                        if hasattr(data_masked, 'mask'):
+                            is_valid = not data_masked.mask[i, j]
                         else:
-                            rgba[0, 0, 0] = r
-                            rgba[0, 0, 1] = g
-                            rgba[0, 0, 2] = b
-                            rgba[0, 0, 3] = 255
-                else:
-                    # Multi-pixel case
-                    for i in range(data.shape[0]):
-                        for j in range(data.shape[1]):
-                            # Check for valid data (not masked and not NaN)
-                            is_valid = True
-                            if hasattr(data_masked, 'mask'):
-                                is_valid = not data_masked.mask[i, j]
-                            else:
-                                # Handle case where data_masked is not a masked array
-                                is_valid = not np.isnan(data_masked[i, j])
+                            # Handle case where data_masked is not a masked array
+                            is_valid = not np.isnan(data_masked[i, j])
+                        
+                        if is_valid and not np.isnan(normalized_data[i, j]):
+                            elev_norm = normalized_data[i, j]
+                            r, g, b = get_topographic_color(elev_norm)
                             
-                            # Additional nodata handling for USGS DEM data (like Portuguese LiDAR)
-                            if is_valid:
-                                pixel_value = data_masked[i, j] if not hasattr(data_masked, 'mask') else data_masked[i, j]
-                                # Check for common nodata values in USGS DEM data
-                                if (np.isnan(pixel_value) or 
-                                    pixel_value == -9999.0 or 
-                                    pixel_value == -32768 or 
-                                    pixel_value == 0):
-                                    is_valid = False
-                            
-                            if is_valid and not np.isnan(normalized_data[i, j]):
-                                valid_pixels += 1
-                                total_elevation += data_masked[i, j]
-                                elev_norm = normalized_data[i, j]
-                                r, g, b = get_topographic_color(elev_norm)
-                                
-                                rgba[i, j, 0] = r  # Red
-                                rgba[i, j, 1] = g  # Green
-                                rgba[i, j, 2] = b  # Blue
-                                rgba[i, j, 3] = 255  # Alpha (opaque)
-                            else:
-                                # Masked/invalid data - transparent
-                                rgba[i, j, 3] = 0
+                            rgba[i, j, 0] = r  # Red
+                            rgba[i, j, 1] = g  # Green
+                            rgba[i, j, 2] = b  # Blue
+                            rgba[i, j, 3] = 255  # Alpha (opaque)
+                        else:
+                            # Masked/invalid data - transparent
+                            rgba[i, j, 3] = 0
                 
                 # Convert to PIL Image and upscale for higher resolution
                 from PIL import Image
