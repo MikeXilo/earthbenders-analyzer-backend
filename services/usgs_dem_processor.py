@@ -221,17 +221,25 @@ class USGSDEMProcessor:
                     logger.info(f"Found {len(products)} {dataset_name} products")
                     
                     # Process products and extract download URLs
-                    for product in products:
+                    logger.info(f"Processing {len(products)} products for {dataset_name}")
+                    for i, product in enumerate(products):
+                        logger.info(f"Product {i+1}: {product.get('title', 'Unknown')}")
+                        logger.info(f"  - downloadURL: {product.get('downloadURL', 'None')}")
+                        logger.info(f"  - sizeInBytes: {product.get('sizeInBytes', 'None')}")
+                        
                         # Check if product has a download URL
                         download_url = product.get('downloadURL')
                         if download_url:
                             # Add product with metadata
+                            size_bytes = product.get('sizeInBytes', 0)
+                            size_mb = (size_bytes / (1024 * 1024)) if size_bytes else 0
+                            
                             all_products.append({
                                 'title': product.get('title', 'Unknown'),
                                 'download_url': download_url,
                                 'resolution': resolution,
                                 'dataset': dataset_name,
-                                'size_mb': product.get('sizeInBytes', 0) / (1024 * 1024),
+                                'size_mb': size_mb,
                                 'modification_date': product.get('modificationInfo', ''),
                                 'bounds': product.get('boundingBox', {}),
                                 'format': product.get('format', 'Unknown'),
@@ -245,6 +253,10 @@ class USGSDEMProcessor:
             if not all_products:
                 logger.warning("No DEM products found for any resolution")
                 return []
+            
+            logger.info(f"Total products collected: {len(all_products)}")
+            for i, product in enumerate(all_products):
+                logger.info(f"Collected product {i+1}: {product['title']} (URL: {product['download_url'][:50]}...)")
             
             # Sort by priority (prefer higher resolution)
             all_products.sort(key=lambda x: x['priority'])
