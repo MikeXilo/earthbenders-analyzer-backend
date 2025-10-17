@@ -27,10 +27,13 @@ import geopandas as gpd
 import base64
 from io import BytesIO
 from PIL import Image
-from shapely.geometry import shape
+from shapely.geometry import shape, box
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+# AWS S3 INTEGRATION
+import boto3
+from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +45,36 @@ class LidarProcessor:
         self.wgs84_crs = CRS.from_epsg(4326)  # WGS84
         self.etrs89_crs = CRS.from_epsg(3763)  # ETRS89/TM06
         self._lock = threading.Lock()
+        # Initialize S3 client
+        self.s3_client = None
+        self.s3_bucket = None
+        self._init_s3()
     
-    def process_lidar_dem(self, polygon_geometry: Dict[str, Any], polygon_id: str) -> Dict[str, Any]:
+    def _init_s3(self):
+        """Initialize S3 client for LIDAR tile downloads"""
+        try:
+            # Get S3 credentials from environment
+            aws_access_key = os.getenv('AWS_ACCESS_KEY_ID')
+            aws_secret_key = os.getenv('AWS_SECRET_ACCESS_KEY')
+            bucket_name = os.getenv('AWS_S3_BUCKET_NAME', 'lidarpt2m2025')
+            region = os.getenv('AWS_REGION', 'eu-north-1')
+            
+            if aws_access_key and aws_secret_key:
+                self.s3_client = boto3.client(
+                    's3',
+                    aws_access_key_id=aws_access_key,
+                    aws_secret_access_key=aws_secret_key,
+                    region_name=region
+                )
+                self.s3_bucket = bucket_name
+                logger.info(f"S3 client initialized for bucket: {bucket_name}")
+            else:
+                logger.warning("AWS credentials not found, S3 integration disabled")
+        except Exception as e:
+            logger.error(f"Failed to initialize S3 client: {str(e)}")
+            self.s3_client = None
+    
+    def process_lidar_dem(self, polygon_geometry: Dict[str, Any], polygon_id: str) -> str:
         """
         Main LIDAR processing pipeline with CRS transformation
         
@@ -121,8 +152,94 @@ class LidarProcessor:
             intersecting_tiles = []
             polygon_bounds = etrs89_polygon.total_bounds
             
-            logger.info(f"Scanning LIDAR directory: {self.lidar_directory}")
             logger.info(f"Searching for tiles intersecting bounds: {polygon_bounds}")
+            
+            # Use S3 if available, otherwise fall back to local directory
+            if self.s3_client:
+                logger.info("Using S3 for LIDAR tile discovery")
+                intersecting_tiles = self._find_intersecting_tiles_s3(etrs89_polygon)
+            else:
+                logger.info(f"Using local directory: {self.lidar_directory}")
+                intersecting_tiles = self._find_intersecting_tiles_local(etrs89_polygon)
+            
+            logger.info(f"Found {len(intersecting_tiles)} intersecting tiles")
+            return intersecting_tiles
+            
+        except Exception as e:
+            logger.error(f"Error finding intersecting tiles: {str(e)}")
+            return []
+    
+    def _find_intersecting_tiles_s3(self, etrs89_polygon: gpd.GeoDataFrame) -> List[str]:
+        """Find intersecting tiles from S3 bucket"""
+        try:
+            intersecting_tiles = []
+            polygon_bounds = etrs89_polygon.total_bounds
+            
+            # List all objects in S3 bucket
+            response = self.s3_client.list_objects_v2(Bucket=self.s3_bucket)
+            
+            if 'Contents' not in response:
+                logger.warning(f"No objects found in S3 bucket: {self.s3_bucket}")
+                return []
+            
+            logger.info(f"Found {len(response['Contents'])} objects in S3 bucket")
+            
+            # Filter for LIDAR tiles and check intersection
+            for obj in response['Contents']:
+                key = obj['Key']
+                if key.lower().endswith(('.tif', '.tiff')):
+                    # Download and check intersection
+                    local_path = self._download_tile_from_s3(key)
+                    if local_path and self._tile_intersects_polygon(local_path, etrs89_polygon):
+                        intersecting_tiles.append(local_path)
+                        logger.info(f"Found intersecting tile: {key}")
+            
+            return intersecting_tiles
+            
+        except Exception as e:
+            logger.error(f"Error finding intersecting tiles from S3: {str(e)}")
+            return []
+    
+    def _download_tile_from_s3(self, s3_key: str) -> Optional[str]:
+        """Download a tile from S3 to local storage"""
+        try:
+            # Create local path
+            local_path = os.path.join(self.lidar_directory, os.path.basename(s3_key))
+            
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            
+            # Download from S3
+            self.s3_client.download_file(self.s3_bucket, s3_key, local_path)
+            logger.info(f"Downloaded tile from S3: {s3_key} -> {local_path}")
+            
+            return local_path
+            
+        except Exception as e:
+            logger.error(f"Error downloading tile from S3: {str(e)}")
+            return None
+    
+    def _tile_intersects_polygon(self, tile_path: str, etrs89_polygon: gpd.GeoDataFrame) -> bool:
+        """Check if a tile intersects with the polygon"""
+        try:
+            with rasterio.open(tile_path) as src:
+                # Get tile bounds
+                tile_bounds = src.bounds
+                tile_box = gpd.GeoDataFrame([1], geometry=[box(tile_bounds.left, tile_bounds.bottom, 
+                                                             tile_bounds.right, tile_bounds.top)], 
+                                          crs=self.etrs89_crs)
+                
+                # Check intersection
+                return etrs89_polygon.intersects(tile_box.geometry.iloc[0]).any()
+                
+        except Exception as e:
+            logger.error(f"Error checking tile intersection: {str(e)}")
+            return False
+    
+    def _find_intersecting_tiles_local(self, etrs89_polygon: gpd.GeoDataFrame) -> List[str]:
+        """Find intersecting tiles from local directory"""
+        try:
+            intersecting_tiles = []
             
             if not os.path.exists(self.lidar_directory):
                 logger.error(f"LIDAR directory not found: {self.lidar_directory}")
