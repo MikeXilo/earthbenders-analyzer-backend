@@ -14,6 +14,27 @@ from utils.file_io import get_most_recent_polygon
 
 logger = logging.getLogger(__name__)
 
+def find_srtm_file(polygon_session_folder, polygon_id):
+    """
+    Find SRTM file in polygon session folder, checking both SRTM and LIDAR patterns
+    Returns the file path if found, None otherwise
+    """
+    # Try SRTM pattern first
+    srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
+    if os.path.exists(srtm_file):
+        logger.info(f"✅ Found SRTM file: {srtm_file}")
+        return srtm_file
+    
+    # Try LIDAR pattern
+    clipped_srtm_file = os.path.join(polygon_session_folder, "clipped_srtm.tif")
+    if os.path.exists(clipped_srtm_file):
+        logger.info(f"✅ Found LIDAR clipped SRTM file: {clipped_srtm_file}")
+        return clipped_srtm_file
+    
+    logger.error(f"❌ SRTM file not found: {srtm_file}")
+    logger.error(f"❌ LIDAR clipped SRTM file not found: {clipped_srtm_file}")
+    return None
+
 def register_routes(app):
     """
     Register all terrain analysis related routes
@@ -617,10 +638,9 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Check if SRTM file exists
-            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-            if not os.path.exists(srtm_file):
-                logger.error(f"❌ SRTM file not found: {srtm_file}")
+            # Check if SRTM file exists (try both SRTM and LIDAR patterns)
+            srtm_file = find_srtm_file(polygon_session_folder, polygon_id)
+            if not srtm_file:
                 return jsonify({'error': 'SRTM file not found. Please process SRTM first.'}), 404
             
             logger.info(f"✅ SRTM file found: {srtm_file}")
