@@ -23,6 +23,10 @@ from rasterio.mask import mask
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.crs import CRS
 import geopandas as gpd
+# CRITICAL IMPORTS FOR IMAGE PROCESSING AND BASE64 ENCODING
+import base64
+from io import BytesIO
+from PIL import Image
 from shapely.geometry import shape
 import numpy as np
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -82,31 +86,18 @@ class LidarProcessor:
             logger.info("Clipping LIDAR DEM with original WGS84 polygon")
             clipped_lidar_path = self._clip_lidar_dem(wgs84_dem_path, polygon_geometry, polygon_id)
             
-            # Step 6: Generate statistics and visualization
-            logger.info("Generating LIDAR DEM statistics and visualization")
-            bounds, statistics, image_data = self._generate_lidar_outputs(clipped_lidar_path)
-            
-            # Step 7: Cleanup temporary files
+            # Step 6: Cleanup temporary files
             self._cleanup_temp_files([merged_etrs89_path, wgs84_dem_path], polygon_id)
             
-            logger.info(f"LIDAR DEM processing completed for polygon {polygon_id}")
+            logger.info(f"LIDAR DEM preparation completed for polygon {polygon_id}")
+            logger.info(f"Returning WGS84 TIFF path: {clipped_lidar_path}")
             
-            return {
-                'clipped_srtm_path': clipped_lidar_path,  # Use same field name as SRTM for frontend compatibility
-                'final_dem_path': clipped_lidar_path,     # Keep final_dem_path for database
-                'bounds': bounds,
-                'statistics': statistics,
-                'image': image_data,
-                'data_source': 'lidar',
-                'status': 'completed'
-            }
+            # Return only the path - let SRTM pipeline handle visualization and database
+            return clipped_lidar_path
             
         except Exception as e:
             logger.error(f"Error processing LIDAR DEM for polygon {polygon_id}: {str(e)}")
-            return {
-                'error': str(e),
-                'status': 'failed'
-            }
+            return None
     
     def _convert_polygon_to_etrs89(self, polygon_geometry: Dict[str, Any]) -> gpd.GeoDataFrame:
         """Convert WGS84 polygon to EPSG:3763 for tile intersection"""
@@ -311,141 +302,7 @@ class LidarProcessor:
             logger.error(f"Error clipping LIDAR DEM: {str(e)}")
             raise
     
-    def _generate_lidar_outputs(self, clipped_lidar_path: str) -> Tuple[Dict[str, float], Dict[str, Any], str]:
-        """Generate bounds, statistics, and visualization for clipped LIDAR DEM"""
-        try:
-            with rasterio.open(clipped_lidar_path) as src:
-                # Get bounds
-                bounds = {
-                    'west': src.bounds.left,
-                    'south': src.bounds.bottom,
-                    'east': src.bounds.right,
-                    'north': src.bounds.top
-                }
-                
-                # Read data for statistics
-                data = src.read(1)
-                valid_data = data[~np.isnan(data)]
-                
-                if len(valid_data) == 0:
-                    raise ValueError("No valid data in clipped LIDAR DEM")
-                
-                # Calculate statistics
-                statistics = {
-                    'min_elevation': float(np.min(valid_data)),
-                    'max_elevation': float(np.max(valid_data)),
-                    'mean_elevation': float(np.mean(valid_data)),
-                    'std_elevation': float(np.std(valid_data)),
-                    'pixel_count': len(valid_data),
-                    'data_source': 'lidar'
-                }
-                
-                # Generate visualization (base64 image)
-                image_data = self._generate_lidar_visualization(data)
-                
-                logger.info(f"Generated LIDAR outputs - bounds: {bounds}, stats: {statistics}")
-                return bounds, statistics, image_data
-                
-        except Exception as e:
-            logger.error(f"Error generating LIDAR outputs: {str(e)}")
-            raise
     
-    def _generate_lidar_visualization(self, data: np.ndarray) -> str:
-        """Generate base64 visualization for LIDAR DEM (same as SRTM approach)"""
-        try:
-            from PIL import Image
-            import base64
-            from io import BytesIO
-            
-            # Create masked array (same approach as SRTM)
-            data_masked = np.ma.masked_where(np.isnan(data) | (data <= 0), data)
-            
-            # Normalize data to 0-1 range (same as SRTM)
-            if not data_masked.mask.all():
-                valid_data = data_masked[~data_masked.mask]
-                if len(valid_data) > 0:
-                    min_val, max_val = valid_data.min(), valid_data.max()
-                    if max_val > min_val:
-                        normalized_data = (data_masked - min_val) / (max_val - min_val)
-                    else:
-                        normalized_data = np.zeros_like(data_masked, dtype=np.float32)
-                else:
-                    normalized_data = np.zeros_like(data_masked, dtype=np.float32)
-            else:
-                normalized_data = np.zeros_like(data_masked, dtype=np.float32)
-            
-            # Create RGBA image with transparent background (same as SRTM)
-            rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
-            
-            # Professional 15-level NCL topographic color scheme (same as SRTM)
-            def get_topographic_color(elev_norm):
-                """Get RGB color for normalized elevation (0-1) using continuous topographic ramp"""
-                if elev_norm < 0.0:
-                    return (16, 105, 40)      
-                elif elev_norm < 0.07:
-                    return (2, 198, 54)     
-                elif elev_norm < 0.13:
-                    return (30, 211, 104)     
-                elif elev_norm < 0.20:
-                    return (95, 224, 116)    
-                elif elev_norm < 0.27:
-                    return (161, 235, 130)     
-                elif elev_norm < 0.33:
-                    return (222, 248, 146)       
-                elif elev_norm < 0.40:
-                    return (245, 229, 148)    
-                elif elev_norm < 0.47:
-                    return (199, 177, 118)    
-                elif elev_norm < 0.53:
-                    return (162, 126, 94)    
-                elif elev_norm < 0.60:
-                    return (143, 98, 85)    
-                elif elev_norm < 0.67:
-                    return (162, 125, 116)    
-                elif elev_norm < 0.73:
-                    return (178, 150, 139)     
-                elif elev_norm < 0.80:
-                    return (199, 176, 170)      
-                elif elev_norm < 0.87:
-                    return (219, 205, 202)      
-                elif elev_norm < 0.93:
-                    return (237, 229, 227)      
-                else:
-                    return (255, 255, 255)  
-            
-            # Apply continuous color ramp (same logic as SRTM)
-            for i in range(data.shape[0]):
-                for j in range(data.shape[1]):
-                    if not data_masked.mask[i, j]:  # Valid data point (same as SRTM)
-                        elev_norm = normalized_data[i, j]
-                        r, g, b = get_topographic_color(elev_norm)
-                        
-                        rgba[i, j, 0] = r  # Red
-                        rgba[i, j, 1] = g  # Green
-                        rgba[i, j, 2] = b  # Blue
-                        rgba[i, j, 3] = 255  # Alpha (opaque)
-                    else:
-                        # Masked/invalid data - transparent (same as SRTM)
-                        rgba[i, j, 3] = 0
-            
-            # Convert to PIL Image and upscale for higher resolution (same as SRTM)
-            img = Image.fromarray(rgba)
-            
-            # Upscale the image for better quality (4x resolution for much sharper images)
-            original_size = img.size
-            upscaled_size = (original_size[0] * 4, original_size[1] * 4)
-            img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
-            
-            # Convert to base64
-            buffer = BytesIO()
-            img_upscaled.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
-            
-            return img_str
-            
-        except Exception as e:
-            logger.error(f"Error generating LIDAR visualization: {str(e)}")
-            return ""
     
     
     def _cleanup_temp_files(self, temp_files: List[str], polygon_id: str):
@@ -473,7 +330,7 @@ class LidarProcessor:
 lidar_processor = LidarProcessor()
 
 
-def process_lidar_dem(polygon_geometry: Dict[str, Any], polygon_id: str) -> Dict[str, Any]:
+def process_lidar_dem(polygon_geometry: Dict[str, Any], polygon_id: str) -> str:
     """
     Main function to process LIDAR DEM with CRS transformation
     
@@ -482,6 +339,6 @@ def process_lidar_dem(polygon_geometry: Dict[str, Any], polygon_id: str) -> Dict
         polygon_id: Unique polygon identifier
         
     Returns:
-        Dict with LIDAR DEM processing results
+        Path to clipped WGS84 LIDAR DEM TIFF file
     """
     return lidar_processor.process_lidar_dem(polygon_geometry, polygon_id)

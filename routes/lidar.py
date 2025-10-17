@@ -155,45 +155,52 @@ def process_lidar_terrain():
         
         logger.info(f"Processing LiDAR terrain for polygon {polygon_id}")
         
-        # Use new independent LIDAR processor with CRS transformation
+        # PHASE 1: LIDAR-specific preparation (CRS conversion and clipping)
+        logger.info("PHASE 1: Starting LIDAR data preparation (merge, reproject, clip)")
         from services.lidar_processor import process_lidar_dem
         
-        results = process_lidar_dem(polygon_geometry, polygon_id)
+        clipped_lidar_path = process_lidar_dem(polygon_geometry, polygon_id)
         
-        if 'error' in results:
+        if not clipped_lidar_path:
             return jsonify({
                 'status': 'error',
-                'message': results['error']
+                'message': 'LIDAR preparation failed to produce a clipped DEM file'
             }), 500
+            
+        logger.info(f"PHASE 1: LIDAR DEM ready at {clipped_lidar_path}. Proceeding to unified analysis.")
         
-        # Save LIDAR analysis results to database (same as SRTM)
-        from services.database import DatabaseService
-        db_service = DatabaseService()
+        # PHASE 2: Unified analysis & visualization (using proven SRTM logic)
+        logger.info("PHASE 2: Starting unified analysis & visualization (using SRTM logic)")
+        from services.srtm import process_srtm_files
         
-        analysis_data = {
-            'srtm_path': results.get('clipped_srtm_path'),  # Save in srtm_path field for frontend compatibility
-            'final_dem_path': results.get('final_dem_path'), # Keep final_dem_path for database
-            'bounds': results.get('bounds'),
-            'statistics': results.get('statistics'),
-            'image': results.get('image'),
-            'data_source': 'lidar'
-        }
+        # Use SRTM pipeline with LIDAR file
+        results = process_srtm_files(
+            polygon_geometry,
+            clipped_lidar_path,
+            f"/app/data/polygon_sessions/{polygon_id}",
+            polygon_id
+        )
         
-        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
-        if save_result and save_result.get('status') == 'success':
-            logger.info(f"✅ LIDAR analysis results saved successfully for {polygon_id}")
-        else:
-            error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
-            logger.error(f"❌ CRITICAL: FAILED to save LIDAR analysis results for {polygon_id}: {error_message}")
+        if not results or not results.get('image'):
             return jsonify({
                 'status': 'error',
-                'message': f'Failed to save analysis results: {error_message}'
+                'message': 'Unified analysis failed to produce a valid visualization overlay'
             }), 500
         
+        # Results are already in proven SRTM format - return directly
         return jsonify({
             'status': 'success',
-            'message': 'LiDAR processing completed',
-            'results': results
+            'message': 'LIDAR terrain analysis completed successfully via unified pipeline',
+            'polygonId': polygon_id,
+            'min_height': results.get('min_height'),
+            'max_height': results.get('max_height'),
+            'bounds': results.get('bounds'),
+            'image': results.get('image'),
+            'analysis_files': {
+                'elevation': results.get('clipped_srtm_path'),
+                'slope': None,
+                'aspect': None
+            }
         })
         
     except Exception as e:
