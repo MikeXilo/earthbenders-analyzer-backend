@@ -8,6 +8,7 @@ import rasterio
 from pathlib import Path
 import base64
 import io
+import threading
 from PIL import Image
 from whitebox import WhiteboxTools
 
@@ -17,19 +18,24 @@ logger = logging.getLogger(__name__)
 
 # Initialize WhiteboxTools lazily to avoid worker conflicts
 wbt = None
+_wbt_lock = threading.Lock()
 
 def get_whitebox_tools():
     """Get WhiteboxTools instance, initializing lazily to avoid worker conflicts"""
     global wbt
     if wbt is None:
-        try:
-            logger.info("Initializing WhiteboxTools...")
-            wbt = WhiteboxTools()
-            wbt.verbose = False
-            logger.info("WhiteboxTools initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize WhiteboxTools: {str(e)}")
-            raise
+        with _wbt_lock:
+            if wbt is None:  # Double-check locking pattern
+                try:
+                    logger.info("Initializing WhiteboxTools...")
+                    wbt = WhiteboxTools()
+                    wbt.verbose = False
+                    # Set working directory to avoid conflicts
+                    wbt.set_working_dir("/tmp")
+                    logger.info("WhiteboxTools initialized successfully")
+                except Exception as e:
+                    logger.error(f"Failed to initialize WhiteboxTools: {str(e)}")
+                    raise
     return wbt
 
 def calculate_slopes(input_file_path, output_file_path):
