@@ -173,45 +173,45 @@ class LidarProcessor:
             return []
     
     def _find_intersecting_tiles_s3(self, etrs89_polygon: gpd.GeoDataFrame) -> List[str]:
-        """Find intersecting tiles using GeoPackage spatial index"""
+        """Find intersecting tiles using PostGIS spatial query"""
         try:
-            # Load GeoPackage spatial index (local file - fast!)
-            tile_index_path = "/app/data/lidarpt2m2025tiles.gpkg"
-            logger.info(f"Loading tile index from: {tile_index_path}")
+            # Convert polygon to WKT for PostGIS query
+            polygon_wkt = etrs89_polygon.geometry.iloc[0].wkt
+            logger.info(f"Querying PostGIS for polygon: {etrs89_polygon.total_bounds}")
             
-            tile_index = gpd.read_file(tile_index_path)
-            logger.info(f"Loaded {len(tile_index)} tiles from spatial index")
+            # Import database service
+            from services.database import DatabaseService
+            db_service = DatabaseService()
             
-            # Spatial intersection query (lightning fast!)
-            query_geom = etrs89_polygon.geometry.iloc[0]
-            logger.info(f"Querying spatial index for polygon: {query_geom.bounds}")
+            # Single SQL query - lightning fast!
+            query = """
+            SELECT name, s3_path FROM lidarpt2m2025tiles 
+            WHERE ST_Intersects(geometry, ST_GeomFromText(%s, 3763))
+            """
             
-            # Use spatial index for fast intersection
-            intersecting_mask = tile_index.sindex.query(query_geom, predicate='intersects')
-            intersecting_tiles = tile_index.iloc[list(intersecting_mask)]
+            # Execute query
+            results = db_service.execute_query(query, (polygon_wkt,))
+            intersecting_tiles = [(row[0], row[1]) for row in results]
             
-            logger.info(f"Found {len(intersecting_tiles)} intersecting tiles via spatial index")
+            logger.info(f"Found {len(intersecting_tiles)} intersecting tiles via PostGIS")
             
             # Get actual S3 file names by querying S3 bucket
-            # We need to find the real S3 paths that match our tile names
             logger.info("Querying S3 bucket for actual file names...")
             
             s3_paths = []
-            for _, tile in intersecting_tiles.iterrows():
-                tile_name = tile['NAME']
-                
-                # Query S3 for files that start with MDT-2m/MDT-2m-{tile_name}-
+            for tile_name, s3_path in intersecting_tiles:
+                # Query S3 for files that start with the s3_path prefix
                 try:
                     response = self.s3_client.list_objects_v2(
                         Bucket=self.s3_bucket,
-                        Prefix=f"MDT-2m/MDT-2m-{tile_name}-"
+                        Prefix=s3_path
                     )
                     
                     if 'Contents' in response and len(response['Contents']) > 0:
                         # Get the first matching file
-                        s3_path = response['Contents'][0]['Key']
-                        s3_paths.append(s3_path)
-                        logger.info(f"Found S3 file: {s3_path}")
+                        actual_s3_path = response['Contents'][0]['Key']
+                        s3_paths.append(actual_s3_path)
+                        logger.info(f"Found S3 file: {actual_s3_path}")
                     else:
                         logger.warning(f"No S3 file found for tile {tile_name}")
                         
@@ -219,12 +219,10 @@ class LidarProcessor:
                     logger.error(f"Error querying S3 for tile {tile_name}: {str(e)}")
             
             logger.info(f"Found {len(s3_paths)} actual S3 files")
-            
-            logger.info(f"Found {len(s3_paths)} S3 paths to download")
             return s3_paths
             
         except Exception as e:
-            logger.error(f"Error querying tile index: {str(e)}")
+            logger.error(f"Error querying PostGIS: {str(e)}")
             return []
     
     def _tile_name_suggests_intersection(self, tile_name: str, polygon_bounds: Tuple[float, ...]) -> bool:
