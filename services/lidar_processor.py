@@ -437,7 +437,7 @@ class LidarProcessor:
             output_dir = f"/app/data/polygon_sessions/{polygon_id}"
             os.makedirs(output_dir, exist_ok=True)
             
-            clipped_path = os.path.join(output_dir, f"{polygon_id}_lidar.tif")
+            clipped_path = os.path.join(output_dir, "clipped_srtm.tif")
             
             logger.info(f"Clipping LIDAR DEM with WGS84 polygon: {clipped_path}")
             
