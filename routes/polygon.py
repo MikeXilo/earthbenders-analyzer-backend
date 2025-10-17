@@ -272,6 +272,7 @@ def register_routes(app):
             from services.statistics import calculate_terrain_statistics
             
             # Calculate comprehensive statistics
+            logger.info(f"Calculating statistics for SRTM file: {srtm_file_path}")
             statistics = calculate_terrain_statistics(
                 srtm_path=srtm_file_path,
                 slope_path=None,  # No slope data yet
@@ -283,6 +284,7 @@ def register_routes(app):
                     'south': min_lat
                 }
             )
+            logger.info(f"Calculated statistics: {statistics}")
             
             # Save analysis results to database
             analysis_data = {
@@ -300,7 +302,9 @@ def register_routes(app):
                 'processed_at': datetime.now().isoformat()
             }
             
-            db_service.save_analysis_results(polygon_id, analysis_data, user_id)
+            logger.info(f"Saving analysis results to database for polygon {polygon_id}")
+            save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)
+            logger.info(f"Database save result: {save_result}")
             db_service.update_polygon_status(polygon_id, 'completed')
             
             # Save SRTM file metadata to database
