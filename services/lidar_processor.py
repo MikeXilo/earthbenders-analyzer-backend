@@ -185,9 +185,20 @@ class LidarProcessor:
             logger.info(f"Found {len(response['Contents'])} objects in S3 bucket")
             
             # Filter for LIDAR tiles and check intersection
+            # SAFETY LIMIT: Only process first 50 tiles to prevent infinite loops
+            tile_count = 0
+            max_tiles = 50
+            
             for obj in response['Contents']:
+                if tile_count >= max_tiles:
+                    logger.warning(f"Reached safety limit of {max_tiles} tiles. Stopping download.")
+                    break
+                    
                 key = obj['Key']
                 if key.lower().endswith(('.tif', '.tiff')):
+                    tile_count += 1
+                    logger.info(f"Processing tile {tile_count}/{max_tiles}: {key}")
+                    
                     # Download tile first
                     local_path = self._download_tile_from_s3(key)
                     if local_path:
