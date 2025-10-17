@@ -187,6 +187,30 @@ def process_lidar_terrain():
                 'message': 'Unified analysis failed to produce a valid visualization overlay'
             }), 500
         
+        # PHASE 3: Save to database (same as SRTM)
+        logger.info("PHASE 3: Saving LIDAR analysis results to database")
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        analysis_data = {
+            'srtm_path': results.get('clipped_srtm_path'),
+            'bounds': results.get('bounds'),
+            'statistics': results.get('statistics'),
+            'image': results.get('image'),
+            'data_source': 'lidar'
+        }
+        
+        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
+        if save_result and save_result.get('status') == 'success':
+            logger.info(f"✅ LIDAR analysis results saved successfully for {polygon_id}")
+        else:
+            error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
+            logger.error(f"❌ CRITICAL: FAILED to save LIDAR analysis results for {polygon_id}: {error_message}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to save analysis results: {error_message}'
+            }), 500
+        
         # Results are already in proven SRTM format - return directly
         return jsonify({
             'status': 'success',

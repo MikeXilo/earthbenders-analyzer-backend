@@ -22,8 +22,14 @@ def get_whitebox_tools():
     """Get WhiteboxTools instance, initializing lazily to avoid worker conflicts"""
     global wbt
     if wbt is None:
-        wbt = WhiteboxTools()
-        wbt.verbose = False
+        try:
+            logger.info("Initializing WhiteboxTools...")
+            wbt = WhiteboxTools()
+            wbt.verbose = False
+            logger.info("WhiteboxTools initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize WhiteboxTools: {str(e)}")
+            raise
     return wbt
 
 def calculate_slopes(input_file_path, output_file_path):
