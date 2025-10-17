@@ -286,7 +286,7 @@ def register_routes(app):
             )
             logger.info(f"Calculated statistics: {statistics}")
             
-            # Save analysis results to database
+            # Save analysis results to database - statistics at root level
             analysis_data = {
                 'srtm_path': srtm_file_path,
                 'slope_path': None,  # Will be set when slope analysis is run
@@ -298,9 +298,11 @@ def register_routes(app):
                     'maxLon': max_lon,
                     'maxLat': max_lat
                 },
-                'statistics': statistics,  # Include calculated statistics
                 'processed_at': datetime.now().isoformat()
             }
+            
+            # Add statistics at root level (not nested)
+            analysis_data.update(statistics)
             
             logger.info(f"Saving analysis results to database for polygon {polygon_id}")
             save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)
