@@ -191,7 +191,7 @@ class LidarProcessor:
             
             # Execute query
             results = db_service.execute_query(query, (polygon_wkt,))
-            intersecting_tiles = [(row[0], row[1]) for row in results]
+            intersecting_tiles = [(row['name'], row['s3_path']) for row in results]
             
             logger.info(f"Found {len(intersecting_tiles)} intersecting tiles via PostGIS")
             
