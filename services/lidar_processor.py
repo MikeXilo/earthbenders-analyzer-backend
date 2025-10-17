@@ -350,51 +350,33 @@ class LidarProcessor:
             raise
     
     def _generate_lidar_visualization(self, data: np.ndarray) -> str:
-        """Generate base64 visualization for LIDAR DEM"""
+        """Generate base64 visualization for LIDAR DEM (same as SRTM approach)"""
         try:
             from PIL import Image
             import base64
             from io import BytesIO
             
-            # Create masked array
-            masked_data = np.ma.masked_where(np.isnan(data), data)
+            # Create masked array (same approach as SRTM)
+            data_masked = np.ma.masked_where(np.isnan(data) | (data <= 0), data)
             
-            # Normalize data to 0-255
-            if not masked_data.mask.all():
-                valid_data = masked_data[~masked_data.mask]
+            # Normalize data to 0-1 range (same as SRTM)
+            if not data_masked.mask.all():
+                valid_data = data_masked[~data_masked.mask]
                 if len(valid_data) > 0:
                     min_val, max_val = valid_data.min(), valid_data.max()
                     if max_val > min_val:
-                        normalized = ((masked_data - min_val) / (max_val - min_val) * 255).astype(np.uint8)
+                        normalized_data = (data_masked - min_val) / (max_val - min_val)
                     else:
-                        normalized = np.zeros_like(masked_data, dtype=np.uint8)
+                        normalized_data = np.zeros_like(data_masked, dtype=np.float32)
                 else:
-                    normalized = np.zeros_like(masked_data, dtype=np.uint8)
+                    normalized_data = np.zeros_like(data_masked, dtype=np.float32)
             else:
-                normalized = np.zeros_like(masked_data, dtype=np.uint8)
+                normalized_data = np.zeros_like(data_masked, dtype=np.float32)
             
-            # Create RGB image with topographic colors
-            rgb_image = self._apply_topographic_colors(normalized)
+            # Create RGBA image with transparent background (same as SRTM)
+            rgba = np.zeros((data.shape[0], data.shape[1], 4), dtype=np.uint8)
             
-            # Convert to PIL Image
-            pil_image = Image.fromarray(rgb_image)
-            
-            # Convert to base64
-            buffer = BytesIO()
-            pil_image.save(buffer, format='PNG')
-            img_str = base64.b64encode(buffer.getvalue()).decode()
-            
-            return img_str
-            
-        except Exception as e:
-            logger.error(f"Error generating LIDAR visualization: {str(e)}")
-            return ""
-    
-    def _apply_topographic_colors(self, data: np.ndarray) -> np.ndarray:
-        """Apply professional topographic color scheme to elevation data (same as SRTM)"""
-        try:
-            # Professional 15-level NCL topographic color scheme
-            # Based on ncl/topo_15lev color scheme for professional cartography
+            # Professional 15-level NCL topographic color scheme (same as SRTM)
             def get_topographic_color(elev_norm):
                 """Get RGB color for normalized elevation (0-1) using continuous topographic ramp"""
                 if elev_norm < 0.0:
@@ -430,33 +412,40 @@ class LidarProcessor:
                 else:
                     return (255, 255, 255)  
             
-            # Create RGB image with professional topographic colors
-            rgb = np.zeros((*data.shape, 3), dtype=np.uint8)
-            
-            # Normalize data to 0-1 range
-            if np.any(data > 0):
-                data_min = np.min(data[data > 0])
-                data_max = np.max(data[data > 0])
-                if data_max > data_min:
-                    normalized_data = (data - data_min) / (data_max - data_min)
-                else:
-                    normalized_data = np.zeros_like(data, dtype=np.float32)
-            else:
-                normalized_data = np.zeros_like(data, dtype=np.float32)
-            
-            # Apply professional color ramp
+            # Apply continuous color ramp (same logic as SRTM)
             for i in range(data.shape[0]):
                 for j in range(data.shape[1]):
-                    if data[i, j] > 0:  # Valid elevation data
+                    if not data_masked.mask[i, j]:  # Valid data point (same as SRTM)
                         elev_norm = normalized_data[i, j]
                         r, g, b = get_topographic_color(elev_norm)
-                        rgb[i, j] = [r, g, b]
+                        
+                        rgba[i, j, 0] = r  # Red
+                        rgba[i, j, 1] = g  # Green
+                        rgba[i, j, 2] = b  # Blue
+                        rgba[i, j, 3] = 255  # Alpha (opaque)
+                    else:
+                        # Masked/invalid data - transparent (same as SRTM)
+                        rgba[i, j, 3] = 0
             
-            return rgb
+            # Convert to PIL Image and upscale for higher resolution (same as SRTM)
+            img = Image.fromarray(rgba)
+            
+            # Upscale the image for better quality (4x resolution for much sharper images)
+            original_size = img.size
+            upscaled_size = (original_size[0] * 4, original_size[1] * 4)
+            img_upscaled = img.resize(upscaled_size, Image.Resampling.NEAREST)
+            
+            # Convert to base64
+            buffer = BytesIO()
+            img_upscaled.save(buffer, format='PNG')
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+            
+            return img_str
             
         except Exception as e:
-            logger.error(f"Error applying topographic colors: {str(e)}")
-            return np.zeros((*data.shape, 3), dtype=np.uint8)
+            logger.error(f"Error generating LIDAR visualization: {str(e)}")
+            return ""
+    
     
     def _cleanup_temp_files(self, temp_files: List[str], polygon_id: str):
         """Clean up temporary files"""

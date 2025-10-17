@@ -166,6 +166,29 @@ def process_lidar_terrain():
                 'message': results['error']
             }), 500
         
+        # Save LIDAR analysis results to database (same as SRTM)
+        from services.database import DatabaseService
+        db_service = DatabaseService()
+        
+        analysis_data = {
+            'final_dem_path': results.get('final_dem_path'),
+            'bounds': results.get('bounds'),
+            'statistics': results.get('statistics'),
+            'image': results.get('image'),
+            'data_source': 'lidar'
+        }
+        
+        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
+        if save_result and save_result.get('status') == 'success':
+            logger.info(f"✅ LIDAR analysis results saved successfully for {polygon_id}")
+        else:
+            error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
+            logger.error(f"❌ CRITICAL: FAILED to save LIDAR analysis results for {polygon_id}: {error_message}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Failed to save analysis results: {error_message}'
+            }), 500
+        
         return jsonify({
             'status': 'success',
             'message': 'LiDAR processing completed',
