@@ -188,11 +188,19 @@ class LidarProcessor:
             for obj in response['Contents']:
                 key = obj['Key']
                 if key.lower().endswith(('.tif', '.tiff')):
-                    # Download and check intersection
+                    # Download tile first
                     local_path = self._download_tile_from_s3(key)
-                    if local_path and self._tile_intersects_polygon(local_path, etrs89_polygon):
-                        intersecting_tiles.append(local_path)
-                        logger.info(f"Found intersecting tile: {key}")
+                    if local_path:
+                        # Check intersection with downloaded tile
+                        if self._tile_intersects_polygon(local_path, etrs89_polygon):
+                            intersecting_tiles.append(local_path)
+                            logger.info(f"Found intersecting tile: {key}")
+                        else:
+                            # Clean up non-intersecting tile to save space
+                            try:
+                                os.remove(local_path)
+                            except:
+                                pass
             
             return intersecting_tiles
             
@@ -233,7 +241,7 @@ class LidarProcessor:
                 return etrs89_polygon.intersects(tile_box.geometry.iloc[0]).any()
                 
         except Exception as e:
-            logger.error(f"Error checking tile intersection: {str(e)}")
+            logger.warning(f"Error checking tile intersection: {str(e)}")
             return False
     
     def _find_intersecting_tiles_local(self, etrs89_polygon: gpd.GeoDataFrame) -> List[str]:
