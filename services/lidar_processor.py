@@ -256,15 +256,25 @@ class LidarProcessor:
             return True  # Default to True if parsing fails
     
     def _download_tile_from_s3(self, s3_key: str) -> Optional[str]:
-        """Download a tile from S3 to local storage"""
+        """Download a tile from S3 to local storage with intelligent caching"""
         try:
-            # Create local path
-            local_path = os.path.join(self.lidar_directory, os.path.basename(s3_key))
+            # Use existing LidarPt directory for caching
+            cache_dir = "/app/data/LidarPt"
+            os.makedirs(cache_dir, exist_ok=True)
             
-            # Ensure directory exists
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            local_filename = os.path.basename(s3_key)
+            local_path = os.path.join(cache_dir, local_filename)
+            
+            # Check if file exists and is recent (7 days old)
+            if os.path.exists(local_path):
+                import time
+                file_age = time.time() - os.path.getmtime(local_path)
+                if file_age < 7 * 24 * 3600:  # 7 days
+                    logger.info(f"Using cached tile: {local_path}")
+                    return local_path
             
             # Download from S3
+            logger.info(f"Downloading tile from S3: {s3_key}")
             self.s3_client.download_file(self.s3_bucket, s3_key, local_path)
             logger.info(f"Downloaded tile from S3: {s3_key} -> {local_path}")
             
