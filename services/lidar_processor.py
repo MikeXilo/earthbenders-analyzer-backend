@@ -391,28 +391,66 @@ class LidarProcessor:
             return ""
     
     def _apply_topographic_colors(self, data: np.ndarray) -> np.ndarray:
-        """Apply topographic color scheme to elevation data"""
+        """Apply professional topographic color scheme to elevation data (same as SRTM)"""
         try:
-            # Create RGB array
+            # Professional 15-level NCL topographic color scheme
+            # Based on ncl/topo_15lev color scheme for professional cartography
+            def get_topographic_color(elev_norm):
+                """Get RGB color for normalized elevation (0-1) using continuous topographic ramp"""
+                if elev_norm < 0.0:
+                    return (16, 105, 40)      
+                elif elev_norm < 0.07:
+                    return (2, 198, 54)     
+                elif elev_norm < 0.13:
+                    return (30, 211, 104)     
+                elif elev_norm < 0.20:
+                    return (95, 224, 116)    
+                elif elev_norm < 0.27:
+                    return (161, 235, 130)     
+                elif elev_norm < 0.33:
+                    return (222, 248, 146)       
+                elif elev_norm < 0.40:
+                    return (245, 229, 148)    
+                elif elev_norm < 0.47:
+                    return (199, 177, 118)    
+                elif elev_norm < 0.53:
+                    return (162, 126, 94)    
+                elif elev_norm < 0.60:
+                    return (143, 98, 85)    
+                elif elev_norm < 0.67:
+                    return (162, 125, 116)    
+                elif elev_norm < 0.73:
+                    return (178, 150, 139)     
+                elif elev_norm < 0.80:
+                    return (199, 176, 170)      
+                elif elev_norm < 0.87:
+                    return (219, 205, 202)      
+                elif elev_norm < 0.93:
+                    return (237, 229, 227)      
+                else:
+                    return (255, 255, 255)  
+            
+            # Create RGB image with professional topographic colors
             rgb = np.zeros((*data.shape, 3), dtype=np.uint8)
             
-            # Simple topographic color scheme
-            # Low elevations: green
-            # Mid elevations: yellow/orange  
-            # High elevations: white/gray
+            # Normalize data to 0-1 range
+            if np.any(data > 0):
+                data_min = np.min(data[data > 0])
+                data_max = np.max(data[data > 0])
+                if data_max > data_min:
+                    normalized_data = (data - data_min) / (data_max - data_min)
+                else:
+                    normalized_data = np.zeros_like(data, dtype=np.float32)
+            else:
+                normalized_data = np.zeros_like(data, dtype=np.float32)
             
-            mask = data > 0
-            if np.any(mask):
-                normalized = data[mask] / 255.0
-                
-                # Green for low elevations
-                rgb[mask, 1] = (normalized * 100).astype(np.uint8)  # Green channel
-                
-                # Red for mid elevations  
-                rgb[mask, 0] = (normalized * 150).astype(np.uint8)  # Red channel
-                
-                # Blue for high elevations
-                rgb[mask, 2] = (normalized * 200).astype(np.uint8)  # Blue channel
+            # Apply professional color ramp
+            for i in range(data.shape[0]):
+                for j in range(data.shape[1]):
+                    if data[i, j] > 0:  # Valid elevation data
+                        elev_norm = normalized_data[i, j]
+                        r, g, b = get_topographic_color(elev_norm)
+                        rgb[i, j] = [r, g, b]
             
             return rgb
             
