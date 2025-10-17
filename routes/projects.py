@@ -84,9 +84,12 @@ def register_routes(app):
                                 statistics = json.loads(row['statistics'])
                             else:
                                 statistics = row['statistics']
+                            logger.info(f"Parsed statistics for project {row['polygon_id']}: {statistics}")
                         except (json.JSONDecodeError, TypeError):
                             logger.warning(f"Could not parse statistics for project {row['polygon_id']}")
                             statistics = {}
+                    else:
+                        logger.warning(f"No statistics found for project {row['polygon_id']}")
                     
                     # Load polygon geometry from GeoJSON file
                     polygon_geometry = None
