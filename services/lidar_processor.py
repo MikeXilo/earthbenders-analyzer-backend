@@ -154,8 +154,11 @@ class LidarProcessor:
             
             logger.info(f"Searching for tiles intersecting bounds: {polygon_bounds}")
             
-            # Use S3 if available, otherwise fall back to local directory
-            if self.s3_client:
+            # Use GeoPackage spatial index if available, otherwise fall back to S3/local
+            if os.path.exists("/app/data/lidarpt2m2025tiles.gpkg"):
+                logger.info("Using GeoPackage spatial index for LIDAR tile discovery")
+                intersecting_tiles = self._find_intersecting_tiles_s3(etrs89_polygon)
+            elif self.s3_client:
                 logger.info("Using S3 for LIDAR tile discovery")
                 intersecting_tiles = self._find_intersecting_tiles_s3(etrs89_polygon)
             else:
@@ -170,54 +173,76 @@ class LidarProcessor:
             return []
     
     def _find_intersecting_tiles_s3(self, etrs89_polygon: gpd.GeoDataFrame) -> List[str]:
-        """Find intersecting tiles from S3 bucket"""
+        """Find intersecting tiles using GeoPackage spatial index"""
         try:
-            intersecting_tiles = []
-            polygon_bounds = etrs89_polygon.total_bounds
+            # Load GeoPackage spatial index (local file - fast!)
+            tile_index_path = "/app/data/lidarpt2m2025tiles.gpkg"
+            logger.info(f"Loading tile index from: {tile_index_path}")
             
-            # List all objects in S3 bucket
-            response = self.s3_client.list_objects_v2(Bucket=self.s3_bucket)
+            tile_index = gpd.read_file(tile_index_path)
+            logger.info(f"Loaded {len(tile_index)} tiles from spatial index")
             
-            if 'Contents' not in response:
-                logger.warning(f"No objects found in S3 bucket: {self.s3_bucket}")
-                return []
+            # Spatial intersection query (lightning fast!)
+            query_geom = etrs89_polygon.geometry.iloc[0]
+            logger.info(f"Querying spatial index for polygon: {query_geom.bounds}")
             
-            logger.info(f"Found {len(response['Contents'])} objects in S3 bucket")
+            # Use spatial index for fast intersection
+            intersecting_mask = tile_index.sindex.query(query_geom, predicate='intersects')
+            intersecting_tiles = tile_index.iloc[list(intersecting_mask)]
             
-            # Filter for LIDAR tiles and check intersection
-            # SAFETY LIMIT: Only process first 50 tiles to prevent infinite loops
-            tile_count = 0
-            max_tiles = 50
+            logger.info(f"Found {len(intersecting_tiles)} intersecting tiles via spatial index")
             
-            for obj in response['Contents']:
-                if tile_count >= max_tiles:
-                    logger.warning(f"Reached safety limit of {max_tiles} tiles. Stopping download.")
-                    break
+            # Get actual S3 file names by querying S3 bucket
+            # We need to find the real S3 paths that match our tile names
+            logger.info("Querying S3 bucket for actual file names...")
+            
+            s3_paths = []
+            for _, tile in intersecting_tiles.iterrows():
+                tile_name = tile['NAME']
+                
+                # Query S3 for files that start with MDT-2m/MDT-2m-{tile_name}-
+                try:
+                    response = self.s3_client.list_objects_v2(
+                        Bucket=self.s3_bucket,
+                        Prefix=f"MDT-2m/MDT-2m-{tile_name}-"
+                    )
                     
-                key = obj['Key']
-                if key.lower().endswith(('.tif', '.tiff')):
-                    tile_count += 1
-                    logger.info(f"Processing tile {tile_count}/{max_tiles}: {key}")
-                    
-                    # Download tile first
-                    local_path = self._download_tile_from_s3(key)
-                    if local_path:
-                        # Check intersection with downloaded tile
-                        if self._tile_intersects_polygon(local_path, etrs89_polygon):
-                            intersecting_tiles.append(local_path)
-                            logger.info(f"Found intersecting tile: {key}")
-                        else:
-                            # Clean up non-intersecting tile to save space
-                            try:
-                                os.remove(local_path)
-                            except:
-                                pass
+                    if 'Contents' in response and len(response['Contents']) > 0:
+                        # Get the first matching file
+                        s3_path = response['Contents'][0]['Key']
+                        s3_paths.append(s3_path)
+                        logger.info(f"Found S3 file: {s3_path}")
+                    else:
+                        logger.warning(f"No S3 file found for tile {tile_name}")
+                        
+                except Exception as e:
+                    logger.error(f"Error querying S3 for tile {tile_name}: {str(e)}")
             
-            return intersecting_tiles
+            logger.info(f"Found {len(s3_paths)} actual S3 files")
+            
+            logger.info(f"Found {len(s3_paths)} S3 paths to download")
+            return s3_paths
             
         except Exception as e:
-            logger.error(f"Error finding intersecting tiles from S3: {str(e)}")
+            logger.error(f"Error querying tile index: {str(e)}")
             return []
+    
+    def _tile_name_suggests_intersection(self, tile_name: str, polygon_bounds: Tuple[float, ...]) -> bool:
+        """Simple heuristic to check if tile name suggests it might intersect with polygon"""
+        try:
+            # Extract coordinates from tile name (e.g., MDT-2m-205263-04-2024.tif)
+            # This is a simple heuristic - in practice, you'd need to know the naming convention
+            parts = tile_name.split('-')
+            if len(parts) >= 3:
+                # Try to extract numeric parts that might be coordinates
+                for part in parts:
+                    if part.isdigit() and len(part) >= 4:
+                        # Simple heuristic: if tile number is in reasonable range
+                        # This is a placeholder - real implementation would need proper coordinate mapping
+                        return True
+            return True  # Default to True for now - let intersection check handle it
+        except:
+            return True  # Default to True if parsing fails
     
     def _download_tile_from_s3(self, s3_key: str) -> Optional[str]:
         """Download a tile from S3 to local storage"""
@@ -303,21 +328,6 @@ class LidarProcessor:
         return not (bounds1[2] < bounds2[0] or bounds1[0] > bounds2[2] or 
                    bounds1[3] < bounds2[1] or bounds1[1] > bounds2[3])
     
-    def _tile_intersects_polygon(self, tile_src: rasterio.DatasetReader, polygon_gdf: gpd.GeoDataFrame) -> bool:
-        """Check if tile intersects with polygon using rasterio.mask"""
-        try:
-            # Get tile geometry
-            tile_geom = [shape(polygon_gdf.geometry.iloc[0])]
-            
-            # Try to mask the tile with the polygon
-            masked_data, _ = mask(tile_src, tile_geom, crop=True, nodata=np.nan)
-            
-            # Check if any valid data remains after masking
-            return not np.all(np.isnan(masked_data))
-            
-        except Exception as e:
-            logger.warning(f"Error checking tile intersection: {str(e)}")
-            return False
     
     def _merge_lidar_tiles(self, tile_paths: List[str], polygon_id: str) -> str:
         """Merge multiple LIDAR tiles into single EPSG:3763 file"""
