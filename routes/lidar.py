@@ -152,6 +152,7 @@ def process_lidar_terrain():
         
         polygon_geometry = data['polygon']
         polygon_id = data.get('polygon_id', 'default_polygon')
+        user_id = data.get('user_id', None)  # Extract user_id for database saving
         
         logger.info(f"🚀 LIDAR ROUTE CALLED - Processing LiDAR terrain for polygon {polygon_id}")
         logger.info(f"📊 LIDAR Request data: {data}")
@@ -210,7 +211,7 @@ def process_lidar_terrain():
             'data_source': 'lidar'
         }
         
-        save_result = db_service.save_analysis_results(polygon_id, analysis_data)
+        save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)
         if save_result and save_result.get('status') == 'success':
             logger.info(f"✅ LIDAR analysis results saved successfully for {polygon_id}")
         else:
