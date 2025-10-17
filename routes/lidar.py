@@ -211,7 +211,6 @@ def process_lidar_terrain():
         analysis_data = {
             'srtm_path': results.get('clipped_srtm_path'),
             'bounds': results.get('bounds'),
-            'image': results.get('image'),
             'data_source': 'lidar'
         }
         

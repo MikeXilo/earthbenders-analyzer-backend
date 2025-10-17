@@ -83,9 +83,16 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         aspect_masked = aspect_data[aspect_data != aspect_nodata] if aspect_data is not None and aspect_nodata is not None else (aspect_data if aspect_data is not None else np.array([]))
         
         # Calculate elevation statistics
-        elevation_min = float(np.min(srtm_masked)) if len(srtm_masked) > 0 else 0
-        elevation_max = float(np.max(srtm_masked)) if len(srtm_masked) > 0 else 0
-        elevation_mean = float(np.mean(srtm_masked)) if len(srtm_masked) > 0 else 0
+        if len(srtm_masked) > 0:
+            elevation_min = float(np.min(srtm_masked))
+            elevation_max = float(np.max(srtm_masked))
+            elevation_mean = float(np.mean(srtm_masked))
+            logger.info(f"Elevation statistics calculated: min={elevation_min}, max={elevation_max}, mean={elevation_mean}")
+        else:
+            elevation_min = None
+            elevation_max = None
+            elevation_mean = None
+            logger.error("CRITICAL: No valid elevation data found after masking!")
         
         # Calculate slope statistics (only if slope data exists)
         slope_mean = float(np.mean(slope_masked)) if len(slope_masked) > 0 and slope_exists else 0
