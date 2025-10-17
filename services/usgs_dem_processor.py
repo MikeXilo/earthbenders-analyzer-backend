@@ -173,22 +173,25 @@ class USGSDEMProcessor:
             gdf = gpd.GeoDataFrame([1], geometry=[shape(polygon_geometry['geometry'])], crs=self.wgs84_crs)
             bounds = gdf.total_bounds
             
-            # CORRECT dataset names from USGS TNM API
+            # CORRECT dataset names from USGS TNM API - ONLY ELEVATION DATA
             datasets = [
                 {
                     'name': 'Digital Elevation Model (DEM) 1 meter',
                     'resolution': '1m',
-                    'priority': 1
+                    'priority': 1,
+                    'keywords': ['dem', 'elevation', '3dep']
                 },
                 {
                     'name': 'National Elevation Dataset (NED) 1/3 arc-second',  # ~10m
                     'resolution': '10m',
-                    'priority': 2
+                    'priority': 2,
+                    'keywords': ['ned', 'elevation']
                 },
                 {
                     'name': 'National Elevation Dataset (NED) 1 arc-second',  # ~30m
                     'resolution': '30m',
-                    'priority': 3
+                    'priority': 3,
+                    'keywords': ['ned', 'elevation']
                 }
             ]
             
@@ -223,12 +226,19 @@ class USGSDEMProcessor:
                     # Process products and extract download URLs
                     logger.info(f"Processing {len(products)} products for {dataset_name}")
                     for i, product in enumerate(products):
-                        logger.info(f"Product {i+1}: {product.get('title', 'Unknown')}")
-                        logger.info(f"  - downloadURL: {product.get('downloadURL', 'None')}")
+                        title = product.get('title', 'Unknown')
+                        download_url = product.get('downloadURL', '')
+                        
+                        logger.info(f"Product {i+1}: {title}")
+                        logger.info(f"  - downloadURL: {download_url[:50]}..." if download_url else "  - downloadURL: None")
                         logger.info(f"  - sizeInBytes: {product.get('sizeInBytes', 'None')}")
                         
+                        # CRITICAL: Filter for elevation data only
+                        if not self._is_elevation_product(product, dataset_info['keywords']):
+                            logger.info(f"  - SKIPPED: Not elevation data")
+                            continue
+                        
                         # Check if product has a download URL
-                        download_url = product.get('downloadURL')
                         if download_url:
                             # Add product with metadata
                             size_bytes = product.get('sizeInBytes', 0)
@@ -297,13 +307,18 @@ class USGSDEMProcessor:
             safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip()
             safe_title = safe_title.replace(' ', '_')
             
-            # Use the original filename if possible
+            # Determine correct file extension based on URL and content
             if download_url:
                 original_filename = os.path.basename(download_url.split('?')[0])
-                if original_filename.endswith('.tif') or original_filename.endswith('.tiff'):
+                
+                # Check if it's a GeoTIFF file (elevation data)
+                if (original_filename.endswith('.tif') or original_filename.endswith('.tiff') or 
+                    '/elevation/' in download_url.lower() or '/3dep/' in download_url.lower()):
                     filename = original_filename
                 else:
+                    # For non-TIFF files, use .tif extension but log warning
                     filename = f"{safe_title}.tif"
+                    logger.warning(f"Non-TIFF file detected: {original_filename} - saving as .tif")
             else:
                 filename = f"{safe_title}.tif"
             
@@ -510,6 +525,46 @@ class USGSDEMProcessor:
             logger.error(f"Error clipping USGS DEM: {str(e)}")
             raise
     
+    def _is_elevation_product(self, product: Dict[str, Any], keywords: List[str]) -> bool:
+        """Check if product is elevation data (DEM/NED) and filter out other USGS data"""
+        try:
+            title = product.get('title', '').lower()
+            description = product.get('description', '').lower()
+            download_url = product.get('downloadURL', '').lower()
+            
+            # Look for elevation-related keywords
+            elevation_keywords = ['dem', 'digital elevation', 'elevation', 'terrain', 'lidar', 'ned', '3dep']
+            has_elevation_keywords = any(keyword in title or keyword in description for keyword in elevation_keywords)
+            
+            # Check if URL points to elevation data
+            is_elevation_url = '/elevation/' in download_url or '/3dep/' in download_url or '/dem/' in download_url
+            
+            # EXCLUDE non-elevation data types
+            exclude_keywords = [
+                'boundary', 'structure', 'gazetteer', 'gnis', 'names', 'transportation', 
+                'hydrography', 'landcover', 'imagery', 'ortho', 'boundaries', 'structures',
+                'buildings', 'roads', 'streams', 'place names', 'geographic names'
+            ]
+            has_exclude_keywords = any(keyword in title or keyword in description for keyword in exclude_keywords)
+            
+            # Check file size - elevation data should be reasonable size (not 2GB+)
+            size_bytes = product.get('sizeInBytes', 0)
+            if size_bytes and size_bytes > 500 * 1024 * 1024:  # 500MB limit
+                logger.info(f"  - SKIPPED: File too large ({size_bytes/(1024*1024):.1f} MB) - likely not elevation data")
+                return False
+            
+            # Must have elevation keywords AND not have exclude keywords AND (elevation URL OR reasonable size)
+            is_elevation = (has_elevation_keywords or is_elevation_url) and not has_exclude_keywords
+            
+            if not is_elevation:
+                logger.info(f"  - SKIPPED: Not elevation data (has_elevation: {has_elevation_keywords}, is_elevation_url: {is_elevation_url}, has_exclude: {has_exclude_keywords})")
+            
+            return is_elevation
+                
+        except Exception as e:
+            logger.error(f"Error checking if product is elevation data: {e}")
+            return False
+
     def _cleanup_temp_files(self, temp_files: List[str], polygon_id: str):
         """Clean up temporary files"""
         for temp_file in temp_files:
