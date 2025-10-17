@@ -272,9 +272,9 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 geometries = [clipping_polygon]
                 
                 # Set crop=True to crop to the polygon bounds
-                # all_touched=False to only include pixels where the center is within the polygon
-                # Note: Using False here makes the mask more precise but might cause small gaps at the edges
-                out_image, out_transform = mask(src, geometries, crop=True, all_touched=False, nodata=-9999)
+                # all_touched=True to include all pixels that touch the polygon (prevents white borders)
+                # This ensures complete coverage within the polygon boundary
+                out_image, out_transform = mask(src, geometries, crop=True, all_touched=True, nodata=np.nan)
                 
                 # Set all pixels outside the polygon to nodata value
                 out_meta = src.meta.copy()
@@ -283,7 +283,7 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                     "height": out_image.shape[1],
                     "width": out_image.shape[2],
                     "transform": out_transform,
-                    "nodata": -9999  # Set a nodata value
+                    "nodata": np.nan  # Use NaN for proper transparency
                 })
                 
                 # Write the masked raster
@@ -299,7 +299,13 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                     logger.info(f"Final clipped raster shape: {data.shape}")
                 
                 # Create a masked array to ignore nodata values
-                data_masked = np.ma.masked_where(data == nodata, data)
+                # Handle both explicit nodata values and NaN values
+                if nodata is not None and not np.isnan(nodata):
+                    # Explicit nodata value (like -9999)
+                    data_masked = np.ma.masked_where(data == nodata, data)
+                else:
+                    # Handle NaN nodata values (common in LIDAR)
+                    data_masked = np.ma.masked_where(np.isnan(data), data)
                 data_min, data_max = np.nanmin(data_masked), np.nanmax(data_masked)
                 logger.info(f"Elevation range: {data_min} to {data_max}")
                 
