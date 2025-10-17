@@ -176,10 +176,9 @@ def process_lidar_terrain():
         
         # Use SRTM pipeline with LIDAR file
         results = process_srtm_files(
+            [clipped_lidar_path],  # Pass as list to match SRTM function signature
             polygon_geometry,
-            clipped_lidar_path,
-            f"/app/data/polygon_sessions/{polygon_id}",
-            polygon_id
+            f"/app/data/polygon_sessions/{polygon_id}"
         )
         
         if not results or not results.get('image'):
