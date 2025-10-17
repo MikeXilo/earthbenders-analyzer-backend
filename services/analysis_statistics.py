@@ -50,6 +50,14 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
             logger.info(f"SRTM data range: {np.nanmin(srtm_data)} to {np.nanmax(srtm_data)}")
             logger.info(f"SRTM data type: {srtm_data.dtype}")
             
+            # CRITICAL DEBUGGING: Check raw array content
+            logger.info(f"Raw array min: {np.min(srtm_data)}, max: {np.max(srtm_data)}")
+            logger.info(f"Raw array unique values (first 10): {np.unique(srtm_data)[:10]}")
+            logger.info(f"Raw array has NaN: {np.any(np.isnan(srtm_data))}")
+            logger.info(f"Raw array has zeros: {np.any(srtm_data == 0)}")
+            logger.info(f"Raw array has -9999: {np.any(srtm_data == -9999)}")
+            logger.info(f"Raw array has -32768: {np.any(srtm_data == -32768)}")
+            
         # Read slope data if available
         slope_data = None
         slope_nodata = None
@@ -67,18 +75,26 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
                 aspect_nodata = src.nodata
         
         # Mask out nodata values - handle both explicit nodata and NaN values
+        logger.info(f"=== MASKING DEBUGGING ===")
+        logger.info(f"Original array size: {srtm_data.size}")
+        
         if srtm_nodata is not None:
-            srtm_masked = srtm_data[srtm_data != srtm_nodata]
             logger.info(f"Using explicit nodata value: {srtm_nodata}")
+            srtm_masked = srtm_data[srtm_data != srtm_nodata]
+            logger.info(f"After filtering nodata={srtm_nodata}: {len(srtm_masked)} values remain")
         else:
             # Handle case where nodata is None (common in LIDAR files)
-            # Filter out NaN values and any obviously invalid values
-            srtm_masked = srtm_data[~np.isnan(srtm_data)]
-            srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
             logger.info(f"Using NaN filtering for LIDAR data")
+            srtm_masked = srtm_data[~np.isnan(srtm_data)]
+            logger.info(f"After NaN filtering: {len(srtm_masked)} values remain")
+            srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
+            logger.info(f"After -9999 filtering: {len(srtm_masked)} values remain")
         
-        logger.info(f"SRTM masked data length: {len(srtm_masked)}")
-        logger.info(f"SRTM masked data range: {np.nanmin(srtm_masked) if len(srtm_masked) > 0 else 'No data'} to {np.nanmax(srtm_masked) if len(srtm_masked) > 0 else 'No data'}")
+        logger.info(f"FINAL masked data length: {len(srtm_masked)}")
+        if len(srtm_masked) > 0:
+            logger.info(f"FINAL masked data range: {np.nanmin(srtm_masked)} to {np.nanmax(srtm_masked)}")
+        else:
+            logger.error("CRITICAL: ALL DATA FILTERED OUT! No valid elevation data remains!")
         slope_masked = slope_data[slope_data != slope_nodata] if slope_data is not None and slope_nodata is not None else (slope_data if slope_data is not None else np.array([]))
         aspect_masked = aspect_data[aspect_data != aspect_nodata] if aspect_data is not None and aspect_nodata is not None else (aspect_data if aspect_data is not None else np.array([]))
         
