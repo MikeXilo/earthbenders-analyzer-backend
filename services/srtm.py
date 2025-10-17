@@ -353,7 +353,15 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 # Apply continuous color ramp
                 for i in range(data.shape[0]):
                     for j in range(data.shape[1]):
-                        if not data_masked.mask[i, j]:  # Valid data point
+                        # Check for valid data (not masked and not NaN)
+                        is_valid = True
+                        if hasattr(data_masked, 'mask'):
+                            is_valid = not data_masked.mask[i, j]
+                        else:
+                            # Handle case where data_masked is not a masked array
+                            is_valid = not np.isnan(data_masked[i, j])
+                        
+                        if is_valid and not np.isnan(normalized_data[i, j]):
                             elev_norm = normalized_data[i, j]
                             r, g, b = get_topographic_color(elev_norm)
                             

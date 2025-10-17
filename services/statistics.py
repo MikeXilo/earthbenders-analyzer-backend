@@ -61,8 +61,14 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
                 aspect_data = src.read(1)
                 aspect_nodata = src.nodata
         
-        # Mask out nodata values
-        srtm_masked = srtm_data[srtm_data != srtm_nodata] if srtm_nodata is not None else srtm_data
+        # Mask out nodata values - handle both explicit nodata and NaN values
+        if srtm_nodata is not None:
+            srtm_masked = srtm_data[srtm_data != srtm_nodata]
+        else:
+            # Handle case where nodata is None (common in LIDAR files)
+            # Filter out NaN values and any obviously invalid values
+            srtm_masked = srtm_data[~np.isnan(srtm_data)]
+            srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
         slope_masked = slope_data[slope_data != slope_nodata] if slope_data is not None and slope_nodata is not None else (slope_data if slope_data is not None else np.array([]))
         aspect_masked = aspect_data[aspect_data != aspect_nodata] if aspect_data is not None and aspect_nodata is not None else (aspect_data if aspect_data is not None else np.array([]))
         
@@ -83,11 +89,22 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         # Determine aspect direction
         aspect_direction = get_aspect_direction(aspect_mean) if aspect_exists else "Unknown"
         
-        # Calculate area (approximate from pixel count)
-        # This is a rough estimate - for accurate area calculation, we'd need proper coordinate transformation
+        # Calculate area using actual raster resolution
         pixel_count = len(srtm_masked)
-        # Assuming 30m resolution (typical for SRTM)
-        pixel_area_m2 = 30 * 30  # 900 m² per pixel
+        
+        # Get actual pixel size from raster metadata
+        with rasterio.open(srtm_path) as src:
+            transform = src.transform
+            pixel_width_deg = abs(transform[0])  # Pixel width in degrees
+            pixel_height_deg = abs(transform[4])  # Pixel height in degrees
+            
+            # Convert degrees to meters (approximate at latitude)
+            # At equator: 1 degree ≈ 111,320 meters
+            # This is a reasonable approximation for most latitudes
+            pixel_width_m = pixel_width_deg * 111320
+            pixel_height_m = pixel_height_deg * 111320
+            pixel_area_m2 = pixel_width_m * pixel_height_m
+            
         area_km2 = (pixel_count * pixel_area_m2) / 1_000_000  # Convert to km²
         
         # Calculate terrain ruggedness (standard deviation of elevation)
