@@ -45,6 +45,32 @@ class DatabaseService:
             logger.error(f"Failed to connect to database: {str(e)}")
             return None
     
+    def execute_query(self, query: str, params: tuple = None) -> list:
+        """Execute a SQL query and return results"""
+        if not self.enabled:
+            logger.error("Database not enabled")
+            return []
+        
+        conn = None
+        try:
+            conn = self._get_connection()
+            if not conn:
+                logger.error("Failed to get database connection")
+                return []
+            
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            cursor.close()
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error executing query: {str(e)}")
+            return []
+        finally:
+            if conn:
+                conn.close()
+    
     def save_polygon_metadata(self, polygon_id: str, filename: str, 
                             geojson_path: str, bounds: Dict[str, float],
                             geometry: Optional[Dict[str, Any]] = None,
