@@ -342,6 +342,10 @@ backend/
 - **PostGIS Integration:** 91,196 LIDAR tiles with spatial indexing for lightning-fast queries
 - **S3 Integration:** Intelligent caching with 7-day performance optimization
 - **Function Signature Fix:** Corrected `process_srtm_files()` call for LIDAR pipeline
+- **Statistics Format Fix:** Unified statistics format across all analysis types
+- **Area Calculation Fix:** Dynamic resolution-based area calculation for accurate statistics
+- **LIDAR Elevation Fix:** Proper NoData handling for complete elevation statistics
+- **Transparency Fix:** Eliminated white buffer pixels in LIDAR elevation visualizations
 
 ## 🚀 Future Enhancements
 
@@ -443,7 +447,7 @@ ls -la /app/data/polygon_sessions/{polygon_id}/
 
 ---
 
-**Version:** 6.4  
+**Version:** 6.5  
 **Last Updated:** January 2025  
 **Status:** Production Ready ✅  
 **All Tests Passing:** ✅  
@@ -455,11 +459,42 @@ ls -la /app/data/polygon_sessions/{polygon_id}/
 **🎉 SRTM + LIDAR UNIFIED PIPELINE:** ✅  
 **PostGIS Spatial Indexing:** ✅  
 **S3 Intelligent Caching:** ✅  
+**Statistics Format Unification:** ✅  
+**Dynamic Area Calculation:** ✅  
+**LIDAR Elevation Statistics:** ✅  
+**Transparency Fix:** ✅  
+
+## 🎉 **RECENT MAJOR FIXES (January 2025):**
+
+### **✅ Statistics Format Unification**
+- **Fixed:** SRTM and LIDAR statistics now saved at root level (not nested)
+- **Result:** Consistent format across all analysis types for frontend display
+- **Impact:** Statistics now properly display in "My Projects" for all analyses
+
+### **✅ Area Calculation Fix**
+- **Fixed:** Dynamic area calculation using actual raster resolution instead of hard-coded 30m
+- **Result:** Accurate area calculations for both SRTM (30m) and LIDAR (2m) data
+- **Impact:** Proper area statistics regardless of data source resolution
+
+### **✅ LIDAR Elevation Statistics Fix**
+- **Fixed:** Enhanced NoData handling for LIDAR files with NaN values
+- **Result:** LIDAR elevation statistics now calculate correctly (elevation_min, elevation_max, elevation_mean)
+- **Impact:** Complete terrain statistics for LIDAR analyses
+
+### **✅ White Buffer Transparency Fix**
+- **Fixed:** Enhanced visualization logic to handle masked arrays and NaN values properly
+- **Result:** No more white buffer pixels around LIDAR elevation layers
+- **Impact:** Clean, professional elevation visualizations with proper transparency
+
+### **✅ Statistics Display Consistency**
+- **Fixed:** Both SRTM and LIDAR routes now save statistics at root level
+- **Result:** Frontend can display statistics consistently across all analysis types
+- **Impact:** Unified user experience for project viewing and statistics display
 
 ## 🚧 **NEXT PRIORITIES:**
 - **Fix Geomorphons for LIDAR** - Extend unified pipeline to geomorphons analysis
 - **Fix Drainage for LIDAR** - Extend unified pipeline to drainage analysis  
-- **Fix LIDAR Elevation Transparency** - Ensure pixels outside polygon are properly transparent
+- **Enhance Error Handling** - Improve user feedback for processing failures
 
 
 ---

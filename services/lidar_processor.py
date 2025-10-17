@@ -371,8 +371,16 @@ class LidarProcessor:
                     'height': merged_array.shape[1],
                     'width': merged_array.shape[2],
                     'transform': merged_transform,
+                    'nodata': np.nan,  # Set explicit NoData value
                     'compress': 'lzw'
                 })
+            
+            # Clean up merged data - handle NoData values properly
+            # Replace common NoData values with NaN
+            merged_array = merged_array.astype(np.float32)
+            merged_array[merged_array == 0] = np.nan  # Replace 0 with NaN
+            merged_array[merged_array == -9999] = np.nan  # Replace -9999 with NaN
+            merged_array[merged_array == -32768] = np.nan  # Replace -32768 with NaN
             
             # Write merged file
             with rasterio.open(merged_path, 'w', **merged_meta) as dst:
@@ -447,6 +455,13 @@ class LidarProcessor:
             with rasterio.open(wgs84_dem_path) as src:
                 # Clip the DEM with the polygon
                 clipped_data, clipped_transform = mask(src, polygon_geom, crop=True, nodata=np.nan)
+                
+                # Additional cleanup for merged LIDAR data
+                # Ensure NoData values are properly set to NaN
+                clipped_data = clipped_data.astype(np.float32)
+                clipped_data[clipped_data == 0] = np.nan
+                clipped_data[clipped_data == -9999] = np.nan
+                clipped_data[clipped_data == -32768] = np.nan
                 
                 # Update metadata
                 clipped_meta = src.meta.copy()
