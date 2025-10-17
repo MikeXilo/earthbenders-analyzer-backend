@@ -101,13 +101,26 @@ class LidarProcessor:
             
             logger.info(f"Found {len(intersecting_tiles)} intersecting LIDAR tiles")
             
-            # Step 3: Process tiles (merge if multiple)
-            if len(intersecting_tiles) == 1:
+            # Step 3: Download S3 tiles to local storage
+            logger.info(f"Downloading {len(intersecting_tiles)} tiles from S3")
+            local_tile_paths = []
+            for s3_path in intersecting_tiles:
+                local_path = self._download_tile_from_s3(s3_path)
+                if local_path:
+                    local_tile_paths.append(local_path)
+                else:
+                    logger.error(f"Failed to download tile: {s3_path}")
+            
+            if not local_tile_paths:
+                raise ValueError("Failed to download any LIDAR tiles from S3")
+            
+            # Step 4: Process tiles (merge if multiple)
+            if len(local_tile_paths) == 1:
                 logger.info("Processing single LIDAR tile")
-                merged_etrs89_path = intersecting_tiles[0]
+                merged_etrs89_path = local_tile_paths[0]
             else:
-                logger.info(f"Merging {len(intersecting_tiles)} LIDAR tiles")
-                merged_etrs89_path = self._merge_lidar_tiles(intersecting_tiles, polygon_id)
+                logger.info(f"Merging {len(local_tile_paths)} LIDAR tiles")
+                merged_etrs89_path = self._merge_lidar_tiles(local_tile_paths, polygon_id)
             
             # Step 4: Reproject merged DEM to WGS84
             logger.info("Reprojecting merged LIDAR DEM to WGS84")
