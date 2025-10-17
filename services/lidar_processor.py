@@ -92,7 +92,8 @@ class LidarProcessor:
             logger.info(f"LIDAR DEM processing completed for polygon {polygon_id}")
             
             return {
-                'final_dem_path': clipped_lidar_path,
+                'clipped_srtm_path': clipped_lidar_path,  # Use same field name as SRTM for frontend compatibility
+                'final_dem_path': clipped_lidar_path,     # Keep final_dem_path for database
                 'bounds': bounds,
                 'statistics': statistics,
                 'image': image_data,

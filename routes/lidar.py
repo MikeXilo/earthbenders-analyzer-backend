@@ -171,7 +171,8 @@ def process_lidar_terrain():
         db_service = DatabaseService()
         
         analysis_data = {
-            'final_dem_path': results.get('final_dem_path'),
+            'srtm_path': results.get('clipped_srtm_path'),  # Save in srtm_path field for frontend compatibility
+            'final_dem_path': results.get('final_dem_path'), # Keep final_dem_path for database
             'bounds': results.get('bounds'),
             'statistics': results.get('statistics'),
             'image': results.get('image'),
