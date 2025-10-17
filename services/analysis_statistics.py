@@ -10,7 +10,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: str, bounds: Dict[str, float]) -> Dict[str, Any]:
+def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: str, bounds: Dict[str, float], data_source: str = 'srtm') -> Dict[str, Any]:
     """
     Calculate terrain statistics from SRTM, slope, and aspect files
     
@@ -19,6 +19,7 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         slope_path: Path to slope file
         aspect_path: Path to aspect file
         bounds: Bounding box coordinates
+        data_source: Data source type ('srtm', 'lidar', etc.) for appropriate NoData handling
         
     Returns:
         Dictionary with calculated statistics
@@ -74,21 +75,29 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
                 aspect_data = src.read(1)
                 aspect_nodata = src.nodata
         
-        # Mask out nodata values - handle both explicit nodata and NaN values
+        # Mask out nodata values - handle based on data source
         logger.info(f"=== MASKING DEBUGGING ===")
+        logger.info(f"Data source: {data_source}")
         logger.info(f"Original array size: {srtm_data.size}")
         
-        if srtm_nodata is not None:
-            logger.info(f"Using explicit nodata value: {srtm_nodata}")
-            srtm_masked = srtm_data[srtm_data != srtm_nodata]
-            logger.info(f"After filtering nodata={srtm_nodata}: {len(srtm_masked)} values remain")
-        else:
-            # Handle case where nodata is None (common in LIDAR files)
-            logger.info(f"Using NaN filtering for LIDAR data")
-            srtm_masked = srtm_data[~np.isnan(srtm_data)]
+        if data_source == 'lidar':
+            # LIDAR-specific NoData handling
+            logger.info(f"Using LIDAR-specific NoData filtering")
+            srtm_masked = srtm_data[~np.isnan(srtm_data)]  # Remove NaN values
             logger.info(f"After NaN filtering: {len(srtm_masked)} values remain")
-            srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
-            logger.info(f"After -9999 filtering: {len(srtm_masked)} values remain")
+            # Don't filter by -9999 for LIDAR as it might be valid elevation
+        else:
+            # SRTM-specific NoData handling (default behavior)
+            if srtm_nodata is not None:
+                logger.info(f"Using explicit nodata value: {srtm_nodata}")
+                srtm_masked = srtm_data[srtm_data != srtm_nodata]
+                logger.info(f"After filtering nodata={srtm_nodata}: {len(srtm_masked)} values remain")
+            else:
+                logger.info(f"Using NaN filtering for SRTM data")
+                srtm_masked = srtm_data[~np.isnan(srtm_data)]
+                logger.info(f"After NaN filtering: {len(srtm_masked)} values remain")
+                srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
+                logger.info(f"After -9999 filtering: {len(srtm_masked)} values remain")
         
         logger.info(f"FINAL masked data length: {len(srtm_masked)}")
         if len(srtm_masked) > 0:

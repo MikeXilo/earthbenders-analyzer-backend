@@ -204,7 +204,8 @@ def process_lidar_terrain():
             srtm_path=clipped_srtm_path,
             slope_path=None,  # LIDAR doesn't have slope/aspect files yet
             aspect_path=None,
-            bounds=results.get('bounds', {})
+            bounds=results.get('bounds', {}),
+            data_source='lidar'  # Pass data source for appropriate NoData handling
         )
         logger.info(f"LIDAR statistics calculated: {statistics}")
         
