@@ -87,7 +87,7 @@ class LidarProcessor:
             bounds, statistics, image_data = self._generate_lidar_outputs(clipped_lidar_path)
             
             # Step 7: Cleanup temporary files
-            self._cleanup_temp_files([merged_etrs89_path, wgs84_dem_path])
+            self._cleanup_temp_files([merged_etrs89_path, wgs84_dem_path], polygon_id)
             
             logger.info(f"LIDAR DEM processing completed for polygon {polygon_id}")
             
@@ -420,7 +420,7 @@ class LidarProcessor:
             logger.error(f"Error applying topographic colors: {str(e)}")
             return np.zeros((*data.shape, 3), dtype=np.uint8)
     
-    def _cleanup_temp_files(self, temp_files: List[str]):
+    def _cleanup_temp_files(self, temp_files: List[str], polygon_id: str):
         """Clean up temporary files"""
         for temp_file in temp_files:
             try:
