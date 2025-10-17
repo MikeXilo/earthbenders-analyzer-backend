@@ -405,7 +405,7 @@ class DatabaseService:
             if srtm_path:
                 try:
                     # Import statistics calculation
-                    from services.statistics import calculate_terrain_statistics
+                    from services.analysis_statistics import calculate_terrain_statistics
                     
                     # Calculate new statistics (will handle missing slope/aspect gracefully)
                     new_stats = calculate_terrain_statistics(

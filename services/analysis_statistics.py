@@ -41,9 +41,14 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         aspect_exists = aspect_path and os.path.exists(aspect_path)
         
         # Read SRTM data
+        logger.info(f"Reading SRTM data from: {srtm_path}")
         with rasterio.open(srtm_path) as src:
             srtm_data = src.read(1)
             srtm_nodata = src.nodata
+            logger.info(f"SRTM data shape: {srtm_data.shape}")
+            logger.info(f"SRTM nodata value: {srtm_nodata}")
+            logger.info(f"SRTM data range: {np.nanmin(srtm_data)} to {np.nanmax(srtm_data)}")
+            logger.info(f"SRTM data type: {srtm_data.dtype}")
             
         # Read slope data if available
         slope_data = None
@@ -64,11 +69,16 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         # Mask out nodata values - handle both explicit nodata and NaN values
         if srtm_nodata is not None:
             srtm_masked = srtm_data[srtm_data != srtm_nodata]
+            logger.info(f"Using explicit nodata value: {srtm_nodata}")
         else:
             # Handle case where nodata is None (common in LIDAR files)
             # Filter out NaN values and any obviously invalid values
             srtm_masked = srtm_data[~np.isnan(srtm_data)]
             srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
+            logger.info(f"Using NaN filtering for LIDAR data")
+        
+        logger.info(f"SRTM masked data length: {len(srtm_masked)}")
+        logger.info(f"SRTM masked data range: {np.nanmin(srtm_masked) if len(srtm_masked) > 0 else 'No data'} to {np.nanmax(srtm_masked) if len(srtm_masked) > 0 else 'No data'}")
         slope_masked = slope_data[slope_data != slope_nodata] if slope_data is not None and slope_nodata is not None else (slope_data if slope_data is not None else np.array([]))
         aspect_masked = aspect_data[aspect_data != aspect_nodata] if aspect_data is not None and aspect_nodata is not None else (aspect_data if aspect_data is not None else np.array([]))
         

@@ -13,7 +13,7 @@ from services.terrain import (
     generate_contours
 )
 from services.database import DatabaseService
-from services.statistics import calculate_terrain_statistics
+from services.analysis_statistics import calculate_terrain_statistics
 from concurrent.futures import ThreadPoolExecutor
 import os
 import json

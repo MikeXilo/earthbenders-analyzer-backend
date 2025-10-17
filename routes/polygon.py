@@ -269,7 +269,7 @@ def register_routes(app):
             user_id = data.get('user_id', None)
             
             # Calculate statistics for the SRTM data
-            from services.statistics import calculate_terrain_statistics
+            from services.analysis_statistics import calculate_terrain_statistics
             
             # Calculate comprehensive statistics
             logger.info(f"Calculating statistics for SRTM file: {srtm_file_path}")
