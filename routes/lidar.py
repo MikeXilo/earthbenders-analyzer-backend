@@ -187,15 +187,25 @@ def process_lidar_terrain():
                 'message': 'Unified analysis failed to produce a valid visualization overlay'
             }), 500
         
-        # PHASE 3: Save to database (same as SRTM)
-        logger.info("PHASE 3: Saving LIDAR analysis results to database")
+        # PHASE 3: Calculate statistics and save to database
+        logger.info("PHASE 3: Calculating statistics and saving LIDAR analysis results to database")
         from services.database import DatabaseService
+        from services.statistics import calculate_terrain_statistics
         db_service = DatabaseService()
+        
+        # Calculate statistics for LIDAR data
+        logger.info("Calculating LIDAR terrain statistics...")
+        statistics = calculate_terrain_statistics(
+            srtm_path=results.get('clipped_srtm_path'),
+            slope_path=None,  # LIDAR doesn't have slope/aspect files yet
+            aspect_path=None,
+            bounds=results.get('bounds', {})
+        )
         
         analysis_data = {
             'srtm_path': results.get('clipped_srtm_path'),
             'bounds': results.get('bounds'),
-            'statistics': results.get('statistics'),
+            'statistics': statistics,
             'image': results.get('image'),
             'data_source': 'lidar'
         }
