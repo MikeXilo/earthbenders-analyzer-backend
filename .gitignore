@@ -11,7 +11,7 @@ logs.txt
 test_*.py
 
 # Exclude test data files
-tests/data/
+tests/
 
 # Exclude development files
 __pycache__/

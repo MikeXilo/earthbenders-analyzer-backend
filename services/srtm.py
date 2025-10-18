@@ -274,7 +274,13 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                 # Set crop=True to crop to the polygon bounds
                 # all_touched=True to include all pixels that touch the polygon (prevents white borders)
                 # This ensures complete coverage within the polygon boundary
-                out_image, out_transform = mask(src, geometries, crop=True, all_touched=True, nodata=np.nan)
+                # Use SRTM standard nodata value for int16 data
+                out_image, out_transform = mask(src, geometries, crop=True, all_touched=True, nodata=-32768)
+                
+                # Convert to float32 to handle nan values properly
+                out_image = out_image.astype(np.float32)
+                # Set masked values to nan for consistent processing
+                out_image = np.where(out_image == -32768, np.nan, out_image)
                 
                 # Set all pixels outside the polygon to nodata value
                 out_meta = src.meta.copy()
@@ -283,7 +289,8 @@ def process_srtm_files(srtm_files, geojson_data, output_folder=None):
                     "height": out_image.shape[1],
                     "width": out_image.shape[2],
                     "transform": out_transform,
-                    "nodata": np.nan  # Use NaN for proper transparency
+                    "nodata": np.nan,  # Use NaN for proper transparency
+                    "dtype": 'float32'  # Ensure float32 for nan support
                 })
                 
                 # Write the masked raster

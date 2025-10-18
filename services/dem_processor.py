@@ -208,12 +208,27 @@ class DEMProcessor:
                     logger.info(f"Mosaic bounds: {src.bounds}")
                     geometries = [clipping_polygon]
                     
+                    # Determine appropriate nodata value based on data type
+                    if data_source == 'srtm':
+                        # SRTM uses int16, so we need an integer nodata value
+                        nodata_value = -32768  # Standard SRTM nodata value
+                    else:
+                        # For other sources, use np.nan if they're float
+                        nodata_value = np.nan
+                    
                     # Set crop=True to crop to the polygon bounds
                     # all_touched=True to include all pixels that touch the polygon
-                    out_image, out_transform = mask(src, geometries, crop=True, all_touched=True, nodata=np.nan)
+                    out_image, out_transform = mask(src, geometries, crop=True, all_touched=True, nodata=nodata_value)
                     
-                    # Set all pixels outside the polygon to nodata value
-                    out_image = np.where(out_image == 0, np.nan, out_image)
+                    # For SRTM data, convert to float to handle nodata properly
+                    if data_source == 'srtm':
+                        # Convert to float32 to allow nan values for processing
+                        out_image = out_image.astype(np.float32)
+                        # Set masked values to nan for consistent processing
+                        out_image = np.where(out_image == nodata_value, np.nan, out_image)
+                    else:
+                        # For other sources, set masked values to nan
+                        out_image = np.where(out_image == 0, np.nan, out_image)
                     
                     # Update metadata
                     out_meta = src.meta.copy()
@@ -222,7 +237,8 @@ class DEMProcessor:
                         "height": out_image.shape[1],
                         "width": out_image.shape[2],
                         "transform": out_transform,
-                        "nodata": np.nan,
+                        "nodata": np.nan,  # Always use nan for output files
+                        "dtype": 'float32',  # Ensure float32 for nan support
                         "compress": "lzw"
                     })
                     
