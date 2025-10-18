@@ -391,15 +391,19 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the geomorphons raster and get nodata value
+        # Read the geomorphons raster
         with rasterio.open(geomorphons_file_path) as src:
             geomorphons_data = src.read(1)
             bounds = src.bounds
             profile = src.profile
-            nodata_value = get_nodata_value(src)
             
-            logger.info(f"Geomorphons dtype: {geomorphons_data.dtype}, nodata: {nodata_value}")
-            logger.info(f"Geomorphons data range: {np.min(geomorphons_data)} to {np.max(geomorphons_data)}")
+            # ✅ CRITICAL: WhiteboxTools outputs geomorphons as int16 with NoData = -32768
+            # This is HARDCODED in WhiteboxTools Rust source (line 286: nodatai16 = i16::MIN)
+            nodata_value = -32768  # Force this value regardless of metadata
+            
+            logger.info(f"Geomorphons dtype: {geomorphons_data.dtype}")
+            logger.info(f"Geomorphons data range (raw): {np.min(geomorphons_data)} to {np.max(geomorphons_data)}")
+            logger.info(f"Using hardcoded NoData value: {nodata_value} (WhiteboxTools standard)")
         
         # Mask using the polygon if available
         if polygon_data:
@@ -413,9 +417,15 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(geomorphons_file_path) as src:
-                    # Mask using the polygon with correct nodata value
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
-                    masked_geomorphons = masked_data[0]  # Extract the data array
+                    # ✅ Use correct NoData value for masking
+                    masked_data, out_transform = mask(
+                        src, 
+                        [clipping_polygon], 
+                        crop=False, 
+                        all_touched=False, 
+                        nodata=nodata_value  # Use -32768
+                    )
+                    masked_geomorphons = masked_data[0]
                 
                 # Replace the original geomorphons data with the masked version
                 geomorphons_data = masked_geomorphons
@@ -443,30 +453,22 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         # Create a colormapped image
         rgba = np.zeros((geomorphons_data.shape[0], geomorphons_data.shape[1], 4), dtype=np.uint8)
         
-        # ✅ BUILD COMPREHENSIVE VALID DATA MASK
+        # ✅ BUILD COMPREHENSIVE VALID DATA MASK FOR int16 DATA
         valid_mask = np.ones(geomorphons_data.shape, dtype=bool)
         
-        # 1. Handle NaN values (for float dtypes)
-        if np.issubdtype(geomorphons_data.dtype, np.floating):
-            nan_mask = np.isnan(geomorphons_data)
-            valid_mask &= ~nan_mask
-            logger.info(f"Found {np.sum(nan_mask)} NaN values")
+        # 1. ✅ Filter out -32768 (WhiteboxTools NoData)
+        nodata_mask = (geomorphons_data == -32768)
+        valid_mask &= ~nodata_mask
+        logger.info(f"Found {np.sum(nodata_mask)} pixels with NoData value -32768")
         
-        # 2. Handle specific nodata value from raster metadata
-        if nodata_value is not None:
-            if np.isnan(nodata_value):
-                # Already handled above
-                pass
-            else:
-                # Integer nodata value (e.g., -32768, -9999, 0)
-                nodata_mask = (geomorphons_data == nodata_value)
-                valid_mask &= ~nodata_mask
-                logger.info(f"Found {np.sum(nodata_mask)} pixels with nodata value {nodata_value}")
+        # 2. ✅ Filter out 0 values (invalid/background)
+        zero_mask = (geomorphons_data == 0)
+        valid_mask &= ~zero_mask
+        logger.info(f"Found {np.sum(zero_mask)} zero values (invalid)")
         
-        # 3. Exclude values outside valid geomorphon range (1-10)
-        # This catches any unexpected values
+        # 3. ✅ Filter values outside valid range [1, 10]
         range_mask = (geomorphons_data >= 1) & (geomorphons_data <= 10)
-        invalid_range = ~range_mask & valid_mask  # Only count as invalid if not already marked as nodata
+        invalid_range = ~range_mask & valid_mask
         valid_mask &= range_mask
         logger.info(f"Found {np.sum(invalid_range)} pixels outside valid range [1,10]")
         

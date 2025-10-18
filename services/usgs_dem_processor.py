@@ -141,9 +141,41 @@ class USGSDEMProcessor:
             
             logger.info(f"Downloading USGS 3DEP DEM for bbox: {min_lon}, {min_lat}, {max_lon}, {max_lat}")
             
-            # Create cache key based on bbox (rounded to avoid tiny differences)
-            bbox_key = f"{min_lon:.4f}_{min_lat:.4f}_{max_lon:.4f}_{max_lat:.4f}"
-            cache_filename = f"usgs_3dep_{bbox_key}.tif"
+            # Calculate bbox dimensions
+            bbox_width = max_lon - min_lon
+            bbox_height = max_lat - min_lat
+            area_size = bbox_width * bbox_height
+            
+            # ✅ INVERTED LOGIC: Smaller areas need HIGHER resolution!
+            # Goal: Maintain ~1m per pixel resolution regardless of area size
+            
+            # Calculate optimal pixel dimensions to achieve ~1m resolution
+            # At mid-latitudes: 1° ≈ 111,000m
+            meters_per_degree = 111000
+            width_meters = bbox_width * meters_per_degree
+            height_meters = bbox_height * meters_per_degree
+            
+            # Calculate pixels needed for 1m resolution
+            # Cap at 4096 (ArcGIS limit) and minimum 500
+            optimal_width = int(min(max(width_meters, 500), 4096))
+            optimal_height = int(min(max(height_meters, 500), 4096))
+            
+            # Use square dimensions (ArcGIS requirement)
+            size_pixels = max(optimal_width, optimal_height)
+            size = f"{size_pixels},{size_pixels}"
+            
+            logger.info(f"Polygon dimensions: {width_meters:.1f}m x {height_meters:.1f}m")
+            logger.info(f"Requesting {size_pixels}x{size_pixels} pixels (~{width_meters/size_pixels:.2f}m per pixel)")
+            
+            # ✅ Add minimum size warning for very small polygons
+            if width_meters < 10 or height_meters < 10:
+                logger.warning(f"⚠️ Polygon is very small ({width_meters:.1f}m x {height_meters:.1f}m)")
+                logger.warning(f"   Minimum recommended size: 10m x 10m")
+                logger.warning(f"   Results may have low pixel count")
+            
+            # Create cache key based on bbox
+            bbox_key = f"{min_lon:.6f}_{min_lat:.6f}_{max_lon:.6f}_{max_lat:.6f}"
+            cache_filename = f"usgs_3dep_{bbox_key}_{size_pixels}.tif"
             local_path = os.path.join(self.cache_directory, cache_filename)
             
             # Check if file exists and is recent (30 days for USGS data)
@@ -152,15 +184,6 @@ class USGSDEMProcessor:
                 if file_age < 30 * 24 * 3600:  # 30 days
                     logger.info(f"Using cached USGS 3DEP DEM: {local_path}")
                     return local_path
-            
-            # Calculate appropriate image size based on bbox area
-            area_size = (max_lon - min_lon) * (max_lat - min_lat)
-            if area_size < 0.001:  # Very small area
-                size = "500,500"
-            elif area_size < 0.01:  # Small area
-                size = "1000,1000"
-            else:  # Larger area
-                size = "2000,2000"
             
             # Build ArcGIS Image Server export request
             export_params = {
@@ -194,6 +217,29 @@ class USGSDEMProcessor:
                 f.write(response.content)
             
             logger.info(f"Downloaded USGS 3DEP DEM: {local_path} ({len(response.content)} bytes)")
+            
+            # ✅ VALIDATE the downloaded file
+            try:
+                with rasterio.open(local_path) as src:
+                    data = src.read(1)
+                    valid_pixels = np.sum(~np.isnan(data))
+                    total_pixels = data.size
+                    
+                    logger.info(f"✅ DEM validation:")
+                    logger.info(f"   Resolution: {src.res}")
+                    logger.info(f"   Shape: {src.shape}")
+                    logger.info(f"   Valid pixels: {valid_pixels}/{total_pixels} ({valid_pixels/total_pixels*100:.1f}%)")
+                    
+                    if valid_pixels == 0:
+                        logger.error("❌ Downloaded DEM has NO valid pixels!")
+                        return None
+                        
+                    logger.info(f"   Elevation range: {np.nanmin(data):.2f} to {np.nanmax(data):.2f}m")
+                    
+            except Exception as e:
+                logger.error(f"Error validating downloaded DEM: {str(e)}")
+                return None
+            
             return local_path
             
         except Exception as e:
@@ -264,12 +310,47 @@ class USGSDEMProcessor:
             
             logger.info(f"Clipping USGS 3DEP DEM with WGS84 polygon: {clipped_path}")
             
-            # Create polygon geometry
-            polygon_geom = [shape(polygon_geometry['geometry'])]
-            
+            # Create polygon geometry with buffer
+            from shapely.geometry import shape
+            polygon_shape = shape(polygon_geometry['geometry'])
+
+            # ✅ Add 20m buffer to ensure we capture all pixels
+            # Convert to meters: 0.0002° ≈ 22m at mid-latitudes
+            buffered_polygon = polygon_shape.buffer(0.0002)
+            polygon_geom = [buffered_polygon]
+
+            logger.info(f"Original polygon bounds: {polygon_shape.bounds}")
+            logger.info(f"Buffered polygon bounds: {buffered_polygon.bounds}")
+
             with rasterio.open(dem_path) as src:
-                # Clip the DEM with the polygon
-                out_image, out_transform = mask(src, polygon_geom, crop=True, nodata=-9999.0)
+                # ✅ Use all_touched=True for small polygons
+                out_image, out_transform = mask(
+                    src, 
+                    polygon_geom, 
+                    crop=True, 
+                    all_touched=True,  # ✅ CRITICAL!
+                    nodata=np.nan,
+                    filled=False
+                )
+                
+                # ✅ DIAGNOSTIC after clipping
+                valid_pixels = np.sum(~np.isnan(out_image[0]))
+                total_clipped_pixels = out_image.shape[1] * out_image.shape[2]
+                pixel_density = valid_pixels / total_clipped_pixels if total_clipped_pixels > 0 else 0
+                
+                logger.info(f"After clipping: {valid_pixels} valid pixels")
+                logger.info(f"Pixel density: {pixel_density*100:.1f}% of clipped area")
+
+                if valid_pixels == 0:
+                    logger.error("❌ CRITICAL: Clipping removed ALL pixels!")
+                    logger.error(f"   Source shape: {src.shape}")
+                    logger.error(f"   Source resolution: {src.res}")
+                    logger.error(f"   Polygon bounds: {polygon_shape.bounds}")
+                    raise ValueError("Clipping resulted in no valid data - polygon too small or misaligned")
+                
+                if pixel_density < 0.1:  # Less than 10% coverage
+                    logger.warning(f"⚠️ Low pixel density ({pixel_density*100:.1f}%)")
+                    logger.warning(f"   Polygon may be too small or misaligned with pixels")
                 
                 # Update metadata
                 out_meta = src.meta.copy()
@@ -278,7 +359,8 @@ class USGSDEMProcessor:
                     "height": out_image.shape[1],
                     "width": out_image.shape[2],
                     "transform": out_transform,
-                    "nodata": -9999.0,
+                    "nodata": np.nan,  # ✅ FIXED: Match clipping nodata
+                    "dtype": 'float32',  # ✅ ADDED: Required for NaN
                     "compress": "lzw"
                 })
                 
