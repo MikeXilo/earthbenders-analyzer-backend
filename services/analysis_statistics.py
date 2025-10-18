@@ -10,12 +10,12 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: str, bounds: Dict[str, float], data_source: str = 'srtm') -> Dict[str, Any]:
+def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: str, bounds: Dict[str, float], data_source: str = 'srtm') -> Dict[str, Any]:
     """
-    Calculate terrain statistics from SRTM, slope, and aspect files
+    Calculate terrain statistics from DEM, slope, and aspect files
     
     Args:
-        srtm_path: Path to SRTM elevation file
+        dem_path: Path to DEM elevation file
         slope_path: Path to slope file
         aspect_path: Path to aspect file
         bounds: Bounding box coordinates
@@ -25,7 +25,7 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         Dictionary with calculated statistics
     """
     try:
-        logger.info(f"Calculating terrain statistics for files: {srtm_path}, {slope_path}, {aspect_path}")
+        logger.info(f"Calculating terrain statistics for files: {dem_path}, {slope_path}, {aspect_path}")
         
         # 🚨 CRITICAL FIX: Ensure bounds is a dict, or initialize to empty
         if bounds is None:
@@ -33,31 +33,31 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
             logger.warning("Bounds were not provided to calculate_terrain_statistics, defaulting to empty dict.")
         
         # Check if SRTM file exists (required)
-        if not os.path.exists(srtm_path):
-            logger.error(f"SRTM file not found: {srtm_path}")
+        if not os.path.exists(dem_path):
+            logger.error(f"DEM file not found: {dem_path}")
             return {}
         
         # Check if slope and aspect files exist (optional)
         slope_exists = slope_path and os.path.exists(slope_path)
         aspect_exists = aspect_path and os.path.exists(aspect_path)
         
-        # Read SRTM data
-        logger.info(f"Reading SRTM data from: {srtm_path}")
-        with rasterio.open(srtm_path) as src:
-            srtm_data = src.read(1)
-            srtm_nodata = src.nodata
-            logger.info(f"SRTM data shape: {srtm_data.shape}")
-            logger.info(f"SRTM nodata value: {srtm_nodata}")
-            logger.info(f"SRTM data range: {np.nanmin(srtm_data)} to {np.nanmax(srtm_data)}")
-            logger.info(f"SRTM data type: {srtm_data.dtype}")
+        # Read DEM data
+        logger.info(f"Reading DEM data from: {dem_path}")
+        with rasterio.open(dem_path) as src:
+            dem_data = src.read(1)
+            dem_nodata = src.nodata
+            logger.info(f"DEM data shape: {dem_data.shape}")
+            logger.info(f"DEM nodata value: {dem_nodata}")
+            logger.info(f"DEM data range: {np.nanmin(dem_data)} to {np.nanmax(dem_data)}")
+            logger.info(f"DEM data type: {dem_data.dtype}")
             
             # CRITICAL DEBUGGING: Check raw array content
-            logger.info(f"Raw array min: {np.min(srtm_data)}, max: {np.max(srtm_data)}")
-            logger.info(f"Raw array unique values (first 10): {np.unique(srtm_data)[:10]}")
-            logger.info(f"Raw array has NaN: {np.any(np.isnan(srtm_data))}")
-            logger.info(f"Raw array has zeros: {np.any(srtm_data == 0)}")
-            logger.info(f"Raw array has -9999: {np.any(srtm_data == -9999)}")
-            logger.info(f"Raw array has -32768: {np.any(srtm_data == -32768)}")
+            logger.info(f"Raw array min: {np.min(dem_data)}, max: {np.max(dem_data)}")
+            logger.info(f"Raw array unique values (first 10): {np.unique(dem_data)[:10]}")
+            logger.info(f"Raw array has NaN: {np.any(np.isnan(dem_data))}")
+            logger.info(f"Raw array has zeros: {np.any(dem_data == 0)}")
+            logger.info(f"Raw array has -9999: {np.any(dem_data == -9999)}")
+            logger.info(f"Raw array has -32768: {np.any(dem_data == -32768)}")
             
         # Read slope data if available
         slope_data = None
@@ -78,40 +78,40 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         # Mask out nodata values - handle based on data source
         logger.info(f"=== MASKING DEBUGGING ===")
         logger.info(f"Data source: {data_source}")
-        logger.info(f"Original array size: {srtm_data.size}")
+        logger.info(f"Original array size: {dem_data.size}")
         
         if data_source == 'lidar':
             # LIDAR-specific NoData handling
             logger.info(f"Using LIDAR-specific NoData filtering")
-            srtm_masked = srtm_data[~np.isnan(srtm_data)]  # Remove NaN values
-            logger.info(f"After NaN filtering: {len(srtm_masked)} values remain")
+            dem_masked = dem_data[~np.isnan(dem_data)]  # Remove NaN values
+            logger.info(f"After NaN filtering: {len(dem_masked)} values remain")
             # Don't filter by -9999 for LIDAR as it might be valid elevation
         else:
             # SRTM-specific NoData handling (default behavior)
-            if srtm_nodata is not None:
-                logger.info(f"Using explicit nodata value: {srtm_nodata}")
-                srtm_masked = srtm_data[srtm_data != srtm_nodata]
-                logger.info(f"After filtering nodata={srtm_nodata}: {len(srtm_masked)} values remain")
+            if dem_nodata is not None:
+                logger.info(f"Using explicit nodata value: {dem_nodata}")
+                dem_masked = dem_data[dem_data != dem_nodata]
+                logger.info(f"After filtering nodata={dem_nodata}: {len(dem_masked)} values remain")
             else:
                 logger.info(f"Using NaN filtering for SRTM data")
-                srtm_masked = srtm_data[~np.isnan(srtm_data)]
-                logger.info(f"After NaN filtering: {len(srtm_masked)} values remain")
-                srtm_masked = srtm_masked[srtm_masked > -9999]  # Filter out common invalid values
-                logger.info(f"After -9999 filtering: {len(srtm_masked)} values remain")
+                dem_masked = dem_data[~np.isnan(dem_data)]
+                logger.info(f"After NaN filtering: {len(dem_masked)} values remain")
+                dem_masked = dem_masked[dem_masked > -9999]  # Filter out common invalid values
+                logger.info(f"After -9999 filtering: {len(dem_masked)} values remain")
         
-        logger.info(f"FINAL masked data length: {len(srtm_masked)}")
-        if len(srtm_masked) > 0:
-            logger.info(f"FINAL masked data range: {np.nanmin(srtm_masked)} to {np.nanmax(srtm_masked)}")
+        logger.info(f"FINAL masked data length: {len(dem_masked)}")
+        if len(dem_masked) > 0:
+            logger.info(f"FINAL masked data range: {np.nanmin(dem_masked)} to {np.nanmax(dem_masked)}")
         else:
             logger.error("CRITICAL: ALL DATA FILTERED OUT! No valid elevation data remains!")
         slope_masked = slope_data[slope_data != slope_nodata] if slope_data is not None and slope_nodata is not None else (slope_data if slope_data is not None else np.array([]))
         aspect_masked = aspect_data[aspect_data != aspect_nodata] if aspect_data is not None and aspect_nodata is not None else (aspect_data if aspect_data is not None else np.array([]))
         
         # Calculate elevation statistics
-        if len(srtm_masked) > 0:
-            elevation_min = float(np.min(srtm_masked))
-            elevation_max = float(np.max(srtm_masked))
-            elevation_mean = float(np.mean(srtm_masked))
+        if len(dem_masked) > 0:
+            elevation_min = float(np.min(dem_masked))
+            elevation_max = float(np.max(dem_masked))
+            elevation_mean = float(np.mean(dem_masked))
             logger.info(f"Elevation statistics calculated: min={elevation_min}, max={elevation_max}, mean={elevation_mean}")
         else:
             elevation_min = None
@@ -132,10 +132,10 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         aspect_direction = get_aspect_direction(aspect_mean) if aspect_exists else "Unknown"
         
         # Calculate area using actual raster resolution
-        pixel_count = len(srtm_masked)
+        pixel_count = len(dem_masked)
         
         # Get actual pixel size from raster metadata
-        with rasterio.open(srtm_path) as src:
+        with rasterio.open(dem_path) as src:
             transform = src.transform
             pixel_width_deg = abs(transform[0])  # Pixel width in degrees
             pixel_height_deg = abs(transform[4])  # Pixel height in degrees
@@ -150,7 +150,7 @@ def calculate_terrain_statistics(srtm_path: str, slope_path: str, aspect_path: s
         area_km2 = (pixel_count * pixel_area_m2) / 1_000_000  # Convert to km²
         
         # Calculate terrain ruggedness (standard deviation of elevation)
-        terrain_ruggedness = float(np.std(srtm_masked)) if len(srtm_masked) > 0 else 0
+        terrain_ruggedness = float(np.std(dem_masked)) if len(dem_masked) > 0 else 0
         
         # Calculate relief (elevation range)
         relief = elevation_max - elevation_min

@@ -6,7 +6,8 @@ import threading
 import logging
 import time
 from typing import Dict, Any, Optional
-from services.srtm import get_srtm_data, process_srtm_files
+from services.srtm import get_srtm_data
+from services.dem_processor import process_dem_files
 from services.terrain import (
     calculate_slopes, calculate_aspect, calculate_geomorphons,
     calculate_hypsometrically_tinted_hillshade, calculate_drainage_network,
@@ -103,7 +104,7 @@ def _process_srtm_terrain(task_id: str, polygon_id: str, geojson_data: Dict[str,
         task_status[task_id]['message'] = 'Processing SRTM files'
         task_status[task_id]['progress'] = 40
         
-        srtm_results = process_srtm_files(srtm_files, geojson_data)
+        srtm_results = process_dem_files(srtm_files, geojson_data, output_folder, 'srtm')
         if not srtm_results:
             raise ValueError("Failed to process SRTM files")
         

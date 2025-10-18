@@ -127,13 +127,14 @@ def process_usgs_dem_analysis():
         
         # PHASE 2: Unified analysis & visualization (using proven SRTM logic)
         logger.info("PHASE 2: Starting unified analysis & visualization (using SRTM logic)")
-        from services.srtm import process_srtm_files
+        from services.dem_processor import process_dem_files
         
-        # Use SRTM pipeline with USGS DEM file
-        results = process_srtm_files(
-            [dem_path],  # Pass as list to match SRTM function signature
+        # Use unified DEM pipeline with USGS DEM file
+        results = process_dem_files(
+            [dem_path],  # Pass as list to match DEM function signature
             polygon_geometry,
-            f"/app/data/polygon_sessions/{polygon_id}"
+            f"/app/data/polygon_sessions/{polygon_id}",
+            'usgs-dem'  # Specify data source
         )
         
         if not results or not results.get('image'):
@@ -142,19 +143,33 @@ def process_usgs_dem_analysis():
                 'message': 'USGS DEM analysis failed to produce visualization'
             }), 500
         
-        # PHASE 3: Database storage with user_id
-        logger.info("PHASE 3: Saving analysis results to database")
+        # PHASE 3: Calculate statistics and save to database
+        logger.info("PHASE 3: Calculating statistics and saving USGS DEM analysis results to database")
         from services.database import DatabaseService
+        from services.analysis_statistics import calculate_terrain_statistics
         
         db_service = DatabaseService()
         
+        # Calculate statistics for USGS DEM data
+        logger.info("Calculating USGS DEM terrain statistics...")
+        statistics = calculate_terrain_statistics(
+            dem_path=dem_path,
+            slope_path=None,  # USGS DEM doesn't have slope/aspect files yet
+            aspect_path=None,
+            bounds=results.get('bounds', {}),
+            data_source='usgs-dem'  # Pass data source for appropriate NoData handling
+        )
+        logger.info(f"USGS DEM statistics calculated: {statistics}")
+        
         # Prepare analysis data for database (following SRTM/LiDAR pattern)
         analysis_data = {
-            'srtm_path': dem_path,  # Store USGS DEM in srtm_path field for compatibility
+            'dem_path': dem_path,  # Store USGS DEM in dem_path field
             'visualization_path': results.get('visualization_path'),
-            'data_source': 'usgs-dem',
-            'statistics': results.get('statistics', {})
+            'data_source': 'usgs-dem'
         }
+        
+        # Add statistics at root level (not nested)
+        analysis_data.update(statistics)
         
         # Save analysis results to database with user_id
         save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)

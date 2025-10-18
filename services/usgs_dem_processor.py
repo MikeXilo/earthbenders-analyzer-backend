@@ -31,7 +31,8 @@ class USGSDEMProcessor:
     
     def __init__(self, cache_directory: str = "/app/data/LidarUSA"):
         self.cache_directory = cache_directory
-        self.wgs84_crs = CRS.from_epsg(4326)  # WGS84
+        # Avoid PROJ database conflicts by using None initially
+        self.wgs84_crs = None
         
         # ArcGIS Image Server REST API endpoints
         self.base_url = "https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer"

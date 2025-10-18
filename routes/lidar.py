@@ -173,13 +173,14 @@ def process_lidar_terrain():
         
         # PHASE 2: Unified analysis & visualization (using proven SRTM logic)
         logger.info("PHASE 2: Starting unified analysis & visualization (using SRTM logic)")
-        from services.srtm import process_srtm_files
+        from services.dem_processor import process_dem_files
         
-        # Use SRTM pipeline with LIDAR file
-        results = process_srtm_files(
-            [clipped_lidar_path],  # Pass as list to match SRTM function signature
+        # Use unified DEM pipeline with LIDAR file
+        results = process_dem_files(
+            [clipped_lidar_path],  # Pass as list to match DEM function signature
             polygon_geometry,
-            f"/app/data/polygon_sessions/{polygon_id}"
+            f"/app/data/polygon_sessions/{polygon_id}",
+            'lidar'  # Specify data source
         )
         
         if not results or not results.get('image'):
@@ -196,12 +197,12 @@ def process_lidar_terrain():
         
         # Calculate statistics for LIDAR data
         logger.info("Calculating LIDAR terrain statistics...")
-        clipped_srtm_path = results.get('clipped_srtm_path')
-        logger.info(f"LIDAR file path for statistics: {clipped_srtm_path}")
-        logger.info(f"LIDAR file exists: {os.path.exists(clipped_srtm_path) if clipped_srtm_path else 'No path provided'}")
+        clipped_dem_path = results.get('clipped_dem_path')
+        logger.info(f"LIDAR file path for statistics: {clipped_dem_path}")
+        logger.info(f"LIDAR file exists: {os.path.exists(clipped_dem_path) if clipped_dem_path else 'No path provided'}")
         
         statistics = calculate_terrain_statistics(
-            srtm_path=clipped_srtm_path,
+            dem_path=clipped_dem_path,
             slope_path=None,  # LIDAR doesn't have slope/aspect files yet
             aspect_path=None,
             bounds=results.get('bounds', {}),
@@ -210,7 +211,7 @@ def process_lidar_terrain():
         logger.info(f"LIDAR statistics calculated: {statistics}")
         
         analysis_data = {
-            'srtm_path': results.get('clipped_srtm_path'),
+            'dem_path': results.get('clipped_dem_path'),
             'bounds': results.get('bounds'),
             'data_source': 'lidar'
         }
@@ -239,7 +240,7 @@ def process_lidar_terrain():
             'bounds': results.get('bounds'),
             'image': results.get('image'),
             'analysis_files': {
-                'elevation': results.get('clipped_srtm_path'),
+                'elevation': results.get('clipped_dem_path'),
                 'slope': None,
                 'aspect': None
             }

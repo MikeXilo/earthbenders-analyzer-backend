@@ -14,26 +14,8 @@ from utils.file_io import get_most_recent_polygon
 
 logger = logging.getLogger(__name__)
 
-def find_srtm_file(polygon_session_folder, polygon_id):
-    """
-    Find SRTM file in polygon session folder, checking both SRTM and LIDAR patterns
-    Returns the file path if found, None otherwise
-    """
-    # Try SRTM pattern first
-    srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-    if os.path.exists(srtm_file):
-        logger.info(f"✅ Found SRTM file: {srtm_file}")
-        return srtm_file
-    
-    # Try LIDAR pattern
-    clipped_srtm_file = os.path.join(polygon_session_folder, "clipped_srtm.tif")
-    if os.path.exists(clipped_srtm_file):
-        logger.info(f"✅ Found LIDAR clipped SRTM file: {clipped_srtm_file}")
-        return clipped_srtm_file
-    
-    logger.error(f"❌ SRTM file not found: {srtm_file}")
-    logger.error(f"❌ LIDAR clipped SRTM file not found: {clipped_srtm_file}")
-    return None
+# Import the unified helper directly
+from scripts.helpers.dem_file_finder import find_dem_file
 
 def register_routes(app):
     """
@@ -66,27 +48,15 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Look for the SRTM data in the polygon session folder
-            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            # Find DEM file using unified helper (supports SRTM, LIDAR PT, LIDAR USA)
+            from scripts.helpers.dem_file_finder import find_dem_file
             
-            if os.path.exists(srtm_file):
-                input_file = srtm_file
-                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
-            else:
-                logger.info(f"❌ SRTM file not found: {srtm_file}")
-                # If no SRTM file in the session folder, look for clipped_srtm.tif
-                clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
-                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
-                
-                if os.path.exists(clipped_srtm):
-                    input_file = clipped_srtm
-                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
-                else:
-                    logger.error("❌ No SRTM data found in polygon session folder")
-                    # SRTM cache directory should only contain raw tiles, not clipped files
-                    # If no SRTM file found, return error
-                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+            input_file = find_dem_file(polygon_session_folder, polygon_id)
+            if not input_file:
+                logger.error("❌ No DEM data found in polygon session folder")
+                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
+            
+            logger.info(f"✅ Using DEM file: {input_file}")
             
             # Output file in the polygon session folder
             slope_file = os.path.join(polygon_session_folder, f"{polygon_id}_slope.tif")
@@ -284,25 +254,13 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Look for the SRTM data in the polygon session folder
-            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            # Find DEM file using unified helper (supports SRTM, LIDAR PT, LIDAR USA)
+            input_file = find_dem_file(polygon_session_folder, polygon_id)
+            if not input_file:
+                logger.error("❌ No DEM data found in polygon session folder")
+                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
-            if os.path.exists(srtm_file):
-                input_file = srtm_file
-                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
-            else:
-                logger.info(f"❌ SRTM file not found: {srtm_file}")
-                # If no SRTM file in the session folder, look for clipped_srtm.tif
-                clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
-                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
-                
-                if os.path.exists(clipped_srtm):
-                    input_file = clipped_srtm
-                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
-                else:
-                    logger.error("❌ No SRTM data found in polygon session folder")
-                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+            logger.info(f"✅ Using DEM file: {input_file}")
             
             # Output file in the polygon session folder
             geomorphons_file = os.path.join(polygon_session_folder, f"{polygon_id}_geomorphons.tif")
@@ -398,25 +356,13 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Look for the SRTM data in the polygon session folder
-            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            # Find DEM file using unified helper (supports SRTM, LIDAR PT, LIDAR USA)
+            input_file = find_dem_file(polygon_session_folder, polygon_id)
+            if not input_file:
+                logger.error("❌ No DEM data found in polygon session folder")
+                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
-            if os.path.exists(srtm_file):
-                input_file = srtm_file
-                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
-            else:
-                logger.info(f"❌ SRTM file not found: {srtm_file}")
-                # If no SRTM file in the session folder, look for clipped_srtm.tif
-                clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
-                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
-                
-                if os.path.exists(clipped_srtm):
-                    input_file = clipped_srtm
-                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
-                else:
-                    logger.error("❌ No SRTM data found in polygon session folder")
-                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+            logger.info(f"✅ Using DEM file: {input_file}")
             
             # Output file in the polygon session folder
             hillshade_file = os.path.join(polygon_session_folder, f"{polygon_id}_hillshade.tif")
@@ -518,25 +464,13 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Look for the SRTM data in the polygon session folder
-            srtm_file = os.path.join(polygon_session_folder, f"{polygon_id}_srtm.tif")
-            logger.info(f"🔍 Looking for SRTM file: {srtm_file}")
+            # Find DEM file using unified helper (supports SRTM, LIDAR PT, LIDAR USA)
+            input_file = find_dem_file(polygon_session_folder, polygon_id)
+            if not input_file:
+                logger.error("❌ No DEM data found in polygon session folder")
+                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
-            if os.path.exists(srtm_file):
-                input_file = srtm_file
-                logger.info(f"✅ Using SRTM file from polygon session: {input_file}")
-            else:
-                logger.info(f"❌ SRTM file not found: {srtm_file}")
-                # If no SRTM file in the session folder, look for clipped_srtm.tif
-                clipped_srtm = os.path.join(polygon_session_folder, "clipped_srtm.tif")
-                logger.info(f"🔍 Looking for clipped SRTM file: {clipped_srtm}")
-                
-                if os.path.exists(clipped_srtm):
-                    input_file = clipped_srtm
-                    logger.info(f"✅ Using clipped SRTM file from polygon session: {input_file}")
-                else:
-                    logger.error("❌ No SRTM data found in polygon session folder")
-                    return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+            logger.info(f"✅ Using DEM file: {input_file}")
             
             # Output file in the polygon session folder
             aspect_file = os.path.join(polygon_session_folder, f"{polygon_id}_aspect.tif")

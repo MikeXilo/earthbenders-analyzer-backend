@@ -10,6 +10,9 @@ logs.txt
 # Exclude test files
 test_*.py
 
+# Exclude test data files
+tests/data/
+
 # Exclude development files
 __pycache__/
 *.pyc

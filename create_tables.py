@@ -29,7 +29,7 @@ def create_tables():
                 name VARCHAR(255),
                 filename VARCHAR(255) NOT NULL,
                 geojson_path TEXT NOT NULL,
-                srtm_path TEXT,
+                dem_path TEXT,
                 slope_path TEXT,
                 bounds JSONB,
                 geometry JSONB,
@@ -46,13 +46,19 @@ def create_tables():
             CREATE TABLE IF NOT EXISTS analyses (
                 id VARCHAR(255) PRIMARY KEY,
                 polygon_id VARCHAR(255) UNIQUE NOT NULL,
-                srtm_path TEXT,
+                dem_path TEXT,
                 slope_path TEXT,
                 aspect_path TEXT,
+                hillshade_path TEXT,
+                geomorphons_path TEXT,
+                drainage_path TEXT,
                 contours_path TEXT,
+                final_dem_path TEXT,
+                data_source VARCHAR(50),
                 statistics JSONB,
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
+                user_id VARCHAR(255),
                 FOREIGN KEY (polygon_id) REFERENCES polygons(id) ON DELETE CASCADE
             );
         """)

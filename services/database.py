@@ -169,11 +169,11 @@ class DatabaseService:
             
             # Insert or update analysis results
             cursor.execute("""
-                INSERT INTO analyses (id, polygon_id, user_id, srtm_path, slope_path, aspect_path, contours_path, final_dem_path, data_source, statistics, created_at, updated_at)
+                INSERT INTO analyses (id, polygon_id, user_id, dem_path, slope_path, aspect_path, contours_path, final_dem_path, data_source, statistics, created_at, updated_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (polygon_id) DO UPDATE SET
                     user_id = EXCLUDED.user_id,
-                    srtm_path = EXCLUDED.srtm_path,
+                    dem_path = EXCLUDED.dem_path,
                     slope_path = EXCLUDED.slope_path,
                     aspect_path = EXCLUDED.aspect_path,
                     contours_path = EXCLUDED.contours_path,
@@ -185,7 +185,7 @@ class DatabaseService:
                 f"analysis_{polygon_id}",
                 polygon_id,
                 user_id,
-                analysis_data.get('srtm_path'),
+                analysis_data.get('dem_path'),
                 analysis_data.get('slope_path'),
                 analysis_data.get('aspect_path'),
                 analysis_data.get('contours_path'),
@@ -285,7 +285,7 @@ class DatabaseService:
             # Update analysis record with new paths
             cursor.execute("""
                 UPDATE analyses SET
-                    srtm_path = COALESCE(%s, srtm_path),
+                    dem_path = COALESCE(%s, dem_path),
                     slope_path = COALESCE(%s, slope_path),
                     aspect_path = COALESCE(%s, aspect_path),
                     hillshade_path = COALESCE(%s, hillshade_path),
@@ -296,7 +296,7 @@ class DatabaseService:
                     updated_at = NOW()
                 WHERE polygon_id = %s
             """, (
-                analysis_data.get('srtm_path'),
+                analysis_data.get('dem_path'),
                 analysis_data.get('slope_path'),
                 analysis_data.get('aspect_path'),
                 analysis_data.get('hillshade_path'),
@@ -379,7 +379,7 @@ class DatabaseService:
             
             # Get current analysis data
             cursor.execute("""
-                SELECT srtm_path, slope_path, aspect_path, statistics
+                SELECT dem_path, slope_path, aspect_path, statistics
                 FROM analyses 
                 WHERE polygon_id = %s
             """, (polygon_id,))
@@ -390,26 +390,26 @@ class DatabaseService:
                 conn.close()
                 return {'status': 'error', 'message': 'Analysis not found'}
             
-            srtm_path = row['srtm_path']
+            dem_path = row['dem_path']
             slope_path = row['slope_path']
             aspect_path = row['aspect_path']
             current_stats = row['statistics'] or {}
             
             # Check if we have the required files
-            if not srtm_path:
+            if not dem_path:
                 cursor.close()
                 conn.close()
-                return {'status': 'error', 'message': 'SRTM file not found'}
+                return {'status': 'error', 'message': 'DEM file not found'}
             
-            # Calculate statistics if we have SRTM data
-            if srtm_path:
+            # Calculate statistics if we have DEM data
+            if dem_path:
                 try:
                     # Import statistics calculation
                     from services.analysis_statistics import calculate_terrain_statistics
                     
                     # Calculate new statistics (will handle missing slope/aspect gracefully)
                     new_stats = calculate_terrain_statistics(
-                        srtm_path=srtm_path,
+                        dem_path=dem_path,
                         slope_path=slope_path,
                         aspect_path=aspect_path,
                         bounds=current_stats.get('bounds', {})
