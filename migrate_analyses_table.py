@@ -37,7 +37,7 @@ def migrate_analyses_table():
             # Add new columns
             cursor.execute("""
                 ALTER TABLE analyses 
-                ADD COLUMN IF NOT EXISTS srtm_path TEXT,
+                ADD COLUMN IF NOT EXISTS dem_path TEXT,
                 ADD COLUMN IF NOT EXISTS slope_path TEXT,
                 ADD COLUMN IF NOT EXISTS aspect_path TEXT,
                 ADD COLUMN IF NOT EXISTS contours_path TEXT

@@ -281,7 +281,7 @@ class DEMProcessor:
             raise
     
     def _generate_visualization(self, dem_path: str, data_source: str) -> str:
-        """Generate base64 visualization for DEM data"""
+        """Generate base64 visualization for DEM data with proper color ramp and transparency"""
         try:
             with rasterio.open(dem_path) as src:
                 # Read elevation data
@@ -297,30 +297,133 @@ class DEMProcessor:
                 min_elev = np.nanmin(valid_data)
                 max_elev = np.nanmax(valid_data)
                 
-                # Create normalized array
+                # Create normalized array (0-1 range)
                 normalized = np.where(
                     np.isnan(elevation_data), 
-                    0, 
+                    np.nan,  # Keep NoData as NaN for transparency
                     (elevation_data - min_elev) / (max_elev - min_elev)
                 )
                 
-                # Convert to 8-bit for image
-                image_data = (normalized * 255).astype(np.uint8)
+                # Apply color ramp (elevation-based colors)
+                colored_image = self._apply_elevation_colormap(normalized)
                 
-                # Create PIL Image
-                img = Image.fromarray(image_data, mode='L')
+                # Create RGBA image with transparency for NoData areas
+                rgba_image = np.zeros((*normalized.shape, 4), dtype=np.uint8)
+                
+                # Set RGB values from colormap
+                rgba_image[:, :, :3] = colored_image
+                
+                # Set alpha channel: 255 for valid data, 0 for NoData
+                rgba_image[:, :, 3] = np.where(np.isnan(normalized), 0, 255)
+                
+                # Create PIL Image with RGBA mode for transparency
+                img = Image.fromarray(rgba_image, mode='RGBA')
                 
                 # Convert to base64
                 buffer = BytesIO()
                 img.save(buffer, format='PNG')
                 img_str = base64.b64encode(buffer.getvalue()).decode()
                 
-                logger.info(f"Generated visualization for {data_source} DEM")
+                logger.info(f"Generated visualization for {data_source} DEM with color ramp and transparency")
                 return img_str
                 
         except Exception as e:
             logger.error(f"Error generating visualization: {str(e)}")
             return ""
+    
+    def _apply_elevation_colormap(self, normalized_data: np.ndarray) -> np.ndarray:
+        """Apply custom elevation color ramp for all data sources (SRTM, LIDAR PT, LIDAR US)"""
+        # Create a 3D array for RGB values
+        colored = np.zeros((*normalized_data.shape, 3), dtype=np.uint8)
+        
+        # Create mask for valid (non-NaN) data
+        valid_mask = ~np.isnan(normalized_data)
+        
+        if not np.any(valid_mask):
+            return colored
+        
+        # Get valid data
+        valid_data = normalized_data[valid_mask]
+        
+        # Define the custom color ramp (49 colors + boundary colors)
+        color_ramp = [
+            (16, 105, 40),   # Boundary Color (elev_norm<0.0)
+            (12, 130, 44),   # Ramp Color 1
+            (8, 155, 48),    # Ramp Color 2
+            (5, 181, 51),    # Ramp Color 3
+            (5, 199, 59),    # Ramp Color 4
+            (14, 203, 75),   # Ramp Color 5
+            (22, 208, 91),   # Ramp Color 6
+            (33, 212, 104),  # Ramp Color 7
+            (50, 215, 108),  # Ramp Color 8
+            (68, 219, 111),  # Ramp Color 9
+            (86, 222, 114),  # Ramp Color 10
+            (103, 225, 118), # Ramp Color 11
+            (121, 228, 122), # Ramp Color 12
+            (139, 231, 125), # Ramp Color 13
+            (157, 234, 129), # Ramp Color 14
+            (176, 238, 134), # Ramp Color 15
+            (195, 242, 139), # Ramp Color 16
+            (215, 246, 144), # Ramp Color 17
+            (226, 245, 146), # Ramp Color 18
+            (232, 240, 147), # Ramp Color 19
+            (238, 235, 147), # Ramp Color 20
+            (245, 229, 148), # Ramp Color 21
+            (233, 216, 140), # Ramp Color 22
+            (221, 202, 132), # Ramp Color 23
+            (209, 188, 124), # Ramp Color 24
+            (196, 173, 116), # Ramp Color 25
+            (185, 157, 109), # Ramp Color 26
+            (173, 141, 101), # Ramp Color 27
+            (162, 125, 94),  # Ramp Color 28
+            (156, 118, 91),  # Ramp Color 29
+            (151, 110, 89),  # Ramp Color 30
+            (146, 103, 86),  # Ramp Color 31
+            (145, 101, 88),  # Ramp Color 32
+            (150, 108, 97),  # Ramp Color 33
+            (155, 115, 105), # Ramp Color 34
+            (160, 123, 113), # Ramp Color 35
+            (166, 131, 121), # Ramp Color 36
+            (171, 138, 128), # Ramp Color 37
+            (177, 146, 137), # Ramp Color 38
+            (183, 153, 145), # Ramp Color 39
+            (189, 161, 153), # Ramp Color 40
+            (195, 169, 161), # Ramp Color 41
+            (201, 176, 169), # Ramp Color 42
+            (207, 184, 177), # Ramp Color 43
+            (213, 192, 185), # Ramp Color 44
+            (220, 200, 193), # Ramp Color 45
+            (226, 207, 201), # Ramp Color 46
+            (232, 215, 209), # Ramp Color 47
+            (238, 223, 217), # Ramp Color 48
+            (244, 231, 225), # Ramp Color 49
+            (255, 255, 255) # Boundary Color (elev_norm≥1.0)
+        ]
+        
+        # Convert to numpy array for efficient indexing
+        color_ramp = np.array(color_ramp, dtype=np.uint8)
+        
+        # Handle boundary cases
+        # Values < 0.0 get the first color
+        low_mask = valid_data < 0.0
+        colored[valid_mask][low_mask] = color_ramp[0]
+        
+        # Values >= 1.0 get the last color
+        high_mask = valid_data >= 1.0
+        colored[valid_mask][high_mask] = color_ramp[-1]
+        
+        # Values between 0.0 and 1.0 get interpolated colors
+        mid_mask = (valid_data >= 0.0) & (valid_data < 1.0)
+        if np.any(mid_mask):
+            mid_data = valid_data[mid_mask]
+            # Map 0.0-1.0 to 0-48 (49 ramp colors, excluding boundary colors)
+            color_indices = (mid_data * 48).astype(int)
+            # Ensure indices are within bounds
+            color_indices = np.clip(color_indices, 0, 48)
+            # Get colors (indices 1-49 in our array, since 0 is boundary color)
+            colored[valid_mask][mid_mask] = color_ramp[color_indices + 1]
+        
+        return colored
     
     def _calculate_statistics(self, dem_path: str, data_source: str) -> Dict[str, Any]:
         """Calculate terrain statistics for DEM data"""
