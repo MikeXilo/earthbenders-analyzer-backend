@@ -572,12 +572,12 @@ def register_routes(app):
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
-            # Check if SRTM file exists (try both SRTM and LIDAR patterns)
-            srtm_file = find_srtm_file(polygon_session_folder, polygon_id)
+            # Check if DEM file exists (try both SRTM and LIDAR patterns)
+            srtm_file = find_dem_file(polygon_session_folder, polygon_id)
             if not srtm_file:
-                return jsonify({'error': 'SRTM file not found. Please process SRTM first.'}), 404
+                return jsonify({'error': 'DEM file not found. Please process elevation data first.'}), 404
             
-            logger.info(f"✅ SRTM file found: {srtm_file}")
+            logger.info(f"✅ DEM file found: {srtm_file}")
             
             # Set up output file path
             drainage_file = os.path.join(polygon_session_folder, f"{polygon_id}_drainage_network.tif")

@@ -38,6 +38,31 @@ def get_whitebox_tools():
                     raise
     return wbt
 
+def get_nodata_value(src):
+    """
+    Get the appropriate nodata value for a raster source
+    
+    Args:
+        src: Rasterio dataset source
+        
+    Returns:
+        Appropriate nodata value based on dtype and source
+    """
+    nodata = src.nodata
+    
+    if nodata is not None:
+        logger.debug(f"Using nodata value from source: {nodata}")
+        return nodata
+    
+    # Infer from dtype if not set
+    dtype = src.dtypes[0]
+    if dtype in ['int16', 'int32', 'int8']:
+        logger.debug(f"Inferred nodata=-32768 for integer dtype: {dtype}")
+        return -32768  # Standard for integer DEMs (SRTM)
+    else:
+        logger.debug(f"Inferred nodata=np.nan for float dtype: {dtype}")
+        return np.nan  # For float DEMs (LIDAR, USGS)
+
 def calculate_slopes(input_file_path, output_file_path):
     """
     Calculate slope from a DEM raster
@@ -84,11 +109,12 @@ def visualize_slope(slope_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the slope raster
+        # Read the slope raster and get nodata value
         with rasterio.open(slope_file_path) as src:
             slope_data = src.read(1)
             bounds = src.bounds
             profile = src.profile
+            nodata_value = get_nodata_value(src)
         
         # Mask using the polygon if available
         if polygon_data:
@@ -102,8 +128,8 @@ def visualize_slope(slope_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(slope_file_path) as src:
-                    # Mask using the polygon - crop=False to keep original extent
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    # Mask using the polygon with correct nodata value
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
                     masked_slope = masked_data[0]  # Extract the data array
                 
                 # Replace the original slope data with the masked version
@@ -365,11 +391,12 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the geomorphons raster
+        # Read the geomorphons raster and get nodata value
         with rasterio.open(geomorphons_file_path) as src:
             geomorphons_data = src.read(1)
             bounds = src.bounds
             profile = src.profile
+            nodata_value = get_nodata_value(src)
         
         # Mask using the polygon if available
         if polygon_data:
@@ -383,9 +410,8 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(geomorphons_file_path) as src:
-                    # Mask using the polygon - crop=False to keep original extent
-                    # Use 0 as nodata value since Geomorphons are integer values (1-10), so 0 is safe
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=0)
+                    # Mask using the polygon with correct nodata value
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
                     masked_geomorphons = masked_data[0]  # Extract the data array
                 
                 # Replace the original geomorphons data with the masked version
@@ -536,7 +562,7 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the hillshade raster - hypsometrically tinted hillshade should be RGB
+        # Read the hillshade raster and get nodata value
         with rasterio.open(hillshade_file_path) as src:
             # Read all bands for RGB data
             if src.count >= 3:
@@ -545,6 +571,7 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
                 hillshade_data = src.read(1)  # Single band fallback
             bounds = src.bounds
             profile = src.profile
+            nodata_value = get_nodata_value(src)
         
         # Mask using the polygon if available
         if polygon_data:
@@ -558,8 +585,8 @@ def visualize_hillshade(hillshade_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(hillshade_file_path) as src:
-                    # Mask using the polygon - crop=False to keep original extent
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    # Mask using the polygon with correct nodata value
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
                     
                     # Handle both single band and multi-band data
                     if len(masked_data.shape) == 3:
@@ -763,11 +790,12 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the aspect raster
+        # Read the aspect raster and get nodata value
         with rasterio.open(aspect_file_path) as src:
             aspect_data = src.read(1)
             bounds = src.bounds
             profile = src.profile
+            nodata_value = get_nodata_value(src)
         
         # Mask using the polygon if available
         if polygon_data:
@@ -781,8 +809,8 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(aspect_file_path) as src:
-                    # Mask using the polygon - crop=False to keep original extent
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    # Mask using the polygon with correct nodata value
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
                     masked_aspect = masked_data[0]  # Extract the data array
                 
                 # Replace the original aspect data with the masked version
@@ -894,11 +922,12 @@ def visualize_drainage_network(drainage_file_path, polygon_data=None):
         dict: Visualization data including base64 image and metadata
     """
     try:
-        # Read the drainage network raster
+        # Read the drainage network raster and get nodata value
         with rasterio.open(drainage_file_path) as src:
             drainage_data = src.read(1)
             bounds = src.bounds
             profile = src.profile
+            nodata_value = get_nodata_value(src)
         
         # Mask using the polygon if available
         if polygon_data:
@@ -912,8 +941,8 @@ def visualize_drainage_network(drainage_file_path, polygon_data=None):
                 
                 # Create a rasterized mask of the polygon
                 with rasterio.open(drainage_file_path) as src:
-                    # Mask using the polygon - crop=False to keep original extent
-                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=np.nan)
+                    # Mask using the polygon with correct nodata value
+                    masked_data, out_transform = mask(src, [clipping_polygon], crop=False, all_touched=False, nodata=nodata_value)
                     
                     # Handle both single band and multi-band data
                     if len(masked_data.shape) == 3:
