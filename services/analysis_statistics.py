@@ -79,25 +79,27 @@ def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: st
         logger.info(f"=== MASKING DEBUGGING ===")
         logger.info(f"Data source: {data_source}")
         logger.info(f"Original array size: {dem_data.size}")
-        
-        if data_source == 'lidar':
-            # LIDAR-specific NoData handling
-            logger.info(f"Using LIDAR-specific NoData filtering")
-            dem_masked = dem_data[~np.isnan(dem_data)]  # Remove NaN values
-            logger.info(f"After NaN filtering: {len(dem_masked)} values remain")
-            # Don't filter by -9999 for LIDAR as it might be valid elevation
-        else:
-            # SRTM-specific NoData handling (default behavior)
-            if dem_nodata is not None:
-                logger.info(f"Using explicit nodata value: {dem_nodata}")
-                dem_masked = dem_data[dem_data != dem_nodata]
-                logger.info(f"After filtering nodata={dem_nodata}: {len(dem_masked)} values remain")
-            else:
-                logger.info(f"Using NaN filtering for SRTM data")
-                dem_masked = dem_data[~np.isnan(dem_data)]
-                logger.info(f"After NaN filtering: {len(dem_masked)} values remain")
-                dem_masked = dem_masked[dem_masked > -9999]  # Filter out common invalid values
-                logger.info(f"After -9999 filtering: {len(dem_masked)} values remain")
+
+        # ✅ UNIFIED NODATA HANDLING - Works for all sources
+        # First, filter out NaN values (common to all sources after processing)
+        dem_masked = dem_data[~np.isnan(dem_data)]
+        logger.info(f"After NaN filtering: {len(dem_masked)} values remain")
+
+        # Then, filter out specific nodata values based on source
+        if data_source == 'srtm':
+            # For SRTM, also filter common invalid values
+            # (In case any slipped through from original int16 data)
+            dem_masked = dem_masked[dem_masked > -9999]
+            logger.info(f"After -9999 filtering: {len(dem_masked)} values remain")
+            dem_masked = dem_masked[dem_masked != -32768]
+            logger.info(f"After -32768 filtering: {len(dem_masked)} values remain")
+        elif data_source == 'lidar':
+            # LIDAR typically uses 0 or negative values as nodata in some cases
+            # But after our processing, NaN filtering should be sufficient
+            pass
+        elif data_source == 'usgs-dem':
+            # USGS DEM uses NaN after our processing
+            pass
         
         logger.info(f"FINAL masked data length: {len(dem_masked)}")
         if len(dem_masked) > 0:
@@ -152,8 +154,12 @@ def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: st
         # Calculate terrain ruggedness (standard deviation of elevation)
         terrain_ruggedness = float(np.std(dem_masked)) if len(dem_masked) > 0 else 0
         
-        # Calculate relief (elevation range)
-        relief = elevation_max - elevation_min
+        # Calculate relief (elevation range) - handle None values
+        if elevation_max is not None and elevation_min is not None:
+            relief = elevation_max - elevation_min
+        else:
+            relief = 0.0
+            logger.warning("Cannot calculate relief - elevation min/max are None")
         
         # Import datetime for processed_at
         from datetime import datetime
@@ -167,21 +173,21 @@ def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: st
         
         statistics = {
             'bounds': bounds,
-            'relief': clean_nan_values(round(relief, 2)),
+            'relief': clean_nan_values(round(relief, 2) if relief is not None else None),
             'area_km2': clean_nan_values(round(area_km2, 4)),
-            'slope_max': clean_nan_values(round(slope_max, 2)),
-            'slope_min': clean_nan_values(round(slope_min, 2)),
-            'slope_std': clean_nan_values(round(slope_std, 2)),
-            'slope_mean': clean_nan_values(round(slope_mean, 2)),
-            'aspect_mean': clean_nan_values(round(aspect_mean, 2)),
+            'slope_max': clean_nan_values(round(slope_max, 2) if slope_max is not None else 0),
+            'slope_min': clean_nan_values(round(slope_min, 2) if slope_min is not None else 0),
+            'slope_std': clean_nan_values(round(slope_std, 2) if slope_std is not None else 0),
+            'slope_mean': clean_nan_values(round(slope_mean, 2) if slope_mean is not None else 0),
+            'aspect_mean': clean_nan_values(round(aspect_mean, 2) if aspect_mean is not None else 0),
             'aspect_path': aspect_path,
             'pixel_count': pixel_count,
             'processed_at': datetime.now().isoformat(),
-            'elevation_max': clean_nan_values(round(elevation_max, 2)),
-            'elevation_min': clean_nan_values(round(elevation_min, 2)),
-            'elevation_mean': clean_nan_values(round(elevation_mean, 2)),
+            'elevation_max': clean_nan_values(round(elevation_max, 2) if elevation_max is not None else None),
+            'elevation_min': clean_nan_values(round(elevation_min, 2) if elevation_min is not None else None),
+            'elevation_mean': clean_nan_values(round(elevation_mean, 2) if elevation_mean is not None else None),
             'aspect_direction': aspect_direction,
-            'terrain_ruggedness': clean_nan_values(round(terrain_ruggedness, 2))
+            'terrain_ruggedness': clean_nan_values(round(terrain_ruggedness, 2) if terrain_ruggedness is not None else 0)
         }
         
         logger.info(f"Calculated statistics: {statistics}")

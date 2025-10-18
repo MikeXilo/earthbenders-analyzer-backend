@@ -283,7 +283,8 @@ def register_routes(app):
                     'east': max_lon,
                     'north': max_lat,
                     'south': min_lat
-                }
+                },
+                data_source='srtm'  # ✅ ADD THIS!
             )
             logger.info(f"Calculated statistics: {statistics}")
             

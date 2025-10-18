@@ -56,9 +56,16 @@ def create_tables():
                 final_dem_path TEXT,
                 data_source VARCHAR(50),
                 statistics JSONB,
+                bounds JSONB,
+                image TEXT,
+                status VARCHAR(50) DEFAULT 'pending',
+                error_message TEXT,
+                analysis_files JSONB,
+                processing_steps JSONB,
+                user_id VARCHAR(255),
+                user_email VARCHAR(255),
                 created_at TIMESTAMP DEFAULT NOW(),
                 updated_at TIMESTAMP DEFAULT NOW(),
-                user_id VARCHAR(255),
                 FOREIGN KEY (polygon_id) REFERENCES polygons(id) ON DELETE CASCADE
             );
         """)

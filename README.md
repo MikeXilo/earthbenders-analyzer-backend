@@ -44,7 +44,7 @@ Tables are created automatically on startup via `create_tables.py`:
 - **API Endpoints:** All core operations tested and working
 - **Error Handling:** Robust error management implemented
 - **Performance:** SRTM tiles cached for reuse across sessions
-- **Background Processing:** Simple threading-based async processing (Celery-free)
+- **Background Processing:** Simple threading-based async processing (Celery-free, in-memory task tracking)
 - **Polygon Geometry:** Database-first storage with file fallback for project viewing
 - **Unified Architecture:** ✅ **LIDAR + SRTM** both working with same visualization pipeline
 
@@ -190,10 +190,10 @@ CREATE TABLE polygons (
     name VARCHAR(255),
     filename VARCHAR(255) NOT NULL,
     geojson_path TEXT NOT NULL,
-    srtm_path TEXT,
+    dem_path TEXT,                    -- ✅ UPDATED: Unified DEM path (was srtm_path)
     slope_path TEXT,
     bounds JSONB,
-    geometry JSONB,  -- NEW: Stores polygon geometry directly in database
+    geometry JSONB,                   -- Stores polygon geometry directly in database
     status VARCHAR(50) DEFAULT 'pending',
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
@@ -206,11 +206,24 @@ CREATE TABLE polygons (
 CREATE TABLE analyses (
     id VARCHAR(255) PRIMARY KEY,
     polygon_id VARCHAR(255) UNIQUE NOT NULL,
-    srtm_path TEXT,
+    dem_path TEXT,                    -- ✅ Unified DEM path (was srtm_path)
     slope_path TEXT,
     aspect_path TEXT,
+    hillshade_path TEXT,              -- ✅ Hillshade analysis
+    geomorphons_path TEXT,            -- ✅ Geomorphons analysis
+    drainage_path TEXT,               -- ✅ Drainage network
     contours_path TEXT,
-    statistics JSONB,
+    final_dem_path TEXT,              -- ✅ Final processed DEM
+    data_source VARCHAR(50),          -- ✅ SRTM, LIDAR, USGS-DEM
+    statistics JSONB,                 -- ✅ Terrain statistics
+    bounds JSONB,                     -- ✅ Geographic bounds
+    image TEXT,                       -- ✅ Base64 visualization
+    status VARCHAR(50) DEFAULT 'pending', -- ✅ Processing status
+    error_message TEXT,               -- ✅ Error tracking
+    analysis_files JSONB,            -- ✅ Structured file paths
+    processing_steps JSONB,           -- ✅ Processing progress
+    user_id VARCHAR(255),             -- ✅ User tracking
+    user_email VARCHAR(255),          -- ✅ User email
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW(),
     FOREIGN KEY (polygon_id) REFERENCES polygons(id) ON DELETE CASCADE
@@ -282,34 +295,94 @@ This tests all endpoints and validates the complete data flow.
 ## 📁 File Structure
 
 ```
-backend/
-├── server.py                 # Main Flask application
-├── create_tables.py          # Database table creation script
-├── requirements.txt          # Python dependencies
-├── Dockerfile               # Container configuration
-├── railway.json             # Railway deployment config
-├── Procfile                 # Alternative start command
-├── services/
-│   ├── database.py          # Database service layer
-│   ├── srtm.py             # SRTM data processing (optimized cache workflow)
-│   ├── terrain.py          # Terrain analysis
-│   └── water_accumulation.py # Water flow analysis
-├── routes/
-│   ├── core.py             # Core API routes
-│   └── polygon.py          # Polygon operations
-├── utils/
-│   ├── config.py           # Configuration settings
-│   └── file_io.py          # File I/O operations
-└── data/                   # File storage directory
-    ├── srtms/              # SRTM cache (reusable raw tiles)
-    ├── polygon_sessions/   # User-specific processed data
-    │   └── {polygon_id}/   # Session folders
-    │       ├── polygon.geojson
-    │       ├── {id}_srtm.tif
-    │       ├── {id}_slope.tif
-    │       └── {id}_contours.geojson
-    └── basemaps/           # Base map data
+Backend/
+├── server.py                           # Main Flask application entry point
+├── create_tables.py                    # Database table creation and migration scripts
+├── requirements.txt                    # Python dependencies
+├── Dockerfile                         # Container configuration for Railway deployment
+├── railway.json                       # Railway deployment configuration
+├── Procfile                           # Alternative start command for Railway
+├── migrate_analyses_table.py          # Database migration: adds dem_path column
+├── services/                          # Core business logic services
+│   ├── database.py                    # Database service layer (CRUD operations)
+│   ├── dem_processor.py              # Unified DEM processing (SRTM, LIDAR, USGS)
+│   ├── srtm.py                       # SRTM-specific data processing and caching
+│   ├── lidar_processor.py            # LIDAR PT data processing (ETRS89 → WGS84)
+│   ├── usgs_dem_processor.py         # USGS 3DEP DEM processing for USA
+│   ├── terrain.py                    # Terrain analysis (slope, aspect, geomorphons, drainage)
+│   ├── terrain_parallel.py           # Parallel terrain processing for performance
+│   ├── analysis_statistics.py        # Statistics calculation for all data sources
+│   ├── raster_visualization.py       # Visualization generation for all terrain layers
+│   ├── background_processor.py       # Background processing without Celery
+│   └── lidar_tile_processor.py       # LIDAR tile processing utilities
+├── routes/                           # API endpoint definitions
+│   ├── polygon.py                    # Core polygon operations (save, process, centroid)
+│   ├── terrain.py                    # Terrain analysis endpoints (slope, aspect, etc.)
+│   ├── projects.py                   # Project management and user projects
+│   ├── lidar.py                      # LIDAR-specific processing endpoints
+│   └── usgs_dem.py                   # USGS DEM processing endpoints
+├── scripts/                          # Utility scripts and helpers
+│   └── helpers/
+│       └── dem_file_finder.py        # Unified DEM file discovery (SRTM, LIDAR, USGS)
+├── tests/                            # Test files and validation
+│   ├── test_srtm.py                  # SRTM processing tests
+│   ├── test_lidar.py                 # LIDAR processing tests
+│   └── test_usgs_dem.py              # USGS DEM processing tests
+└── data/                            # File storage directory (Railway volumes)
+    ├── srtms/                       # SRTM cache (reusable raw tiles)
+    ├── polygon_sessions/            # User-specific processed data
+    │   └── {polygon_id}/            # Session folders
+    │       ├── polygon.geojson       # User-drawn polygon
+    │       ├── clipped_dem.tif      # Clipped elevation data
+    │       ├── {id}_srtm.tif        # Legacy SRTM naming
+    │       ├── {id}_slope.tif       # Slope analysis
+    │       ├── {id}_aspect.tif      # Aspect analysis
+    │       ├── {id}_geomorphons.tif # Geomorphons analysis
+    │       ├── {id}_hillshade.tif   # Hillshade visualization
+    │       └── {id}_drainage.tif    # Drainage network
+    └── basemaps/                    # Base map data (future)
 ```
+
+## 🔧 **File Descriptions**
+
+### **Core Application Files**
+- **`server.py`** - Main Flask application with route registration and error handling
+- **`create_tables.py`** - Database schema creation and migration management
+- **`requirements.txt`** - Python dependencies with geospatial libraries
+- **`Dockerfile`** - Container configuration for Railway deployment
+
+### **Services Layer (Business Logic)**
+- **`database.py`** - Database CRUD operations, connection management, and query execution
+- **`dem_processor.py`** - **UNIFIED DEM PROCESSING** - Handles SRTM, LIDAR PT, LIDAR US, USGS DEM with consistent visualization
+- **`srtm.py`** - SRTM-specific processing with intelligent caching and tile management
+- **`lidar_processor.py`** - LIDAR PT processing with ETRS89→WGS84 transformation
+- **`usgs_dem_processor.py`** - USGS 3DEP DEM processing for USA territories
+- **`terrain.py`** - Terrain analysis functions (slope, aspect, geomorphons, drainage, hillshade)
+- **`terrain_parallel.py`** - Parallel processing for multiple terrain operations
+- **`analysis_statistics.py`** - Statistics calculation with NoData handling for all sources
+- **`raster_visualization.py`** - Visualization generation with transparency and color ramps
+- **`background_processor.py`** - Simple threading-based async processing (Celery-free, in-memory task tracking)
+- **`lidar_tile_processor.py`** - LIDAR tile processing utilities and S3 integration
+
+### **Routes Layer (API Endpoints)**
+- **`polygon.py`** - Core polygon operations (save, process, centroid calculation)
+- **`terrain.py`** - Terrain analysis endpoints (slope, aspect, geomorphons, drainage, hillshade)
+- **`projects.py`** - Project management and user project retrieval
+- **`lidar.py`** - LIDAR-specific processing endpoints
+- **`usgs_dem.py`** - USGS DEM processing endpoints
+
+### **Utility Scripts**
+- **`dem_file_finder.py`** - Unified DEM file discovery supporting multiple naming conventions
+- **`migrate_analyses_table.py`** - Database migration for dem_path column
+
+### **Test Files**
+- **`test_srtm.py`** - SRTM processing validation tests
+- **`test_lidar.py`** - LIDAR processing validation tests  
+- **`test_usgs_dem.py`** - USGS DEM processing validation tests
+
+### **Data Storage Structure**
+- **`/data/srtms/`** - SRTM tile cache for performance optimization
+- **`/data/polygon_sessions/{id}/`** - User-specific processed data with consistent naming
 
 ## 🔄 Data Flow
 
@@ -493,10 +566,35 @@ ls -la /app/data/polygon_sessions/{polygon_id}/
 - **Result:** Frontend can display statistics consistently across all analysis types
 - **Impact:** Unified user experience for project viewing and statistics display
 
+### **✅ Elevation Visualization Fix**
+- **Fixed:** Vectorized color mapping with 50-color elevation ramp
+- **Result:** No more black pixels, proper elevation colors with transparency
+- **Impact:** Beautiful elevation visualizations for all data sources
+
+### **✅ Bounds Format Standardization**
+- **Fixed:** Unified bounds format (west/east/north/south) across all data sources
+- **Result:** Frontend can properly display elevation overlays
+- **Impact:** Consistent map visualization for all DEM types
+
+### **✅ Statistics Calculation Bug Fixes**
+- **Fixed:** NaN comparison bugs in statistics calculation
+- **Result:** Elevation statistics now calculate correctly for all sources
+- **Impact:** Complete terrain statistics in database
+
+### **✅ Geomorphons Visualization Fix**
+- **Fixed:** Comprehensive NoData handling for geomorphons visualization
+- **Result:** Proper landform visualization with transparency
+- **Impact:** Clean geomorphons analysis for all data sources
+
+### **✅ Projects Database Fix**
+- **Fixed:** Updated projects route to use dem_path instead of srtm_path
+- **Result:** Projects page loads correctly
+- **Impact:** User can view all their analysis projects
+
 ## 🚧 **NEXT PRIORITIES:**
-- **Fix Geomorphons for LIDAR** - Extend unified pipeline to geomorphons analysis
-- **Fix Drainage for LIDAR** - Extend unified pipeline to drainage analysis  
 - **Enhance Error Handling** - Improve user feedback for processing failures
+- **Performance Optimization** - Further optimize parallel processing
+- **Advanced Analysis** - Add more terrain analysis options
 
 
 ---

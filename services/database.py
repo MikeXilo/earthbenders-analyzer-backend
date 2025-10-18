@@ -169,17 +169,33 @@ class DatabaseService:
             
             # Insert or update analysis results
             cursor.execute("""
-                INSERT INTO analyses (id, polygon_id, user_id, dem_path, slope_path, aspect_path, contours_path, final_dem_path, data_source, statistics, created_at, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                INSERT INTO analyses (
+                    id, polygon_id, user_id, 
+                    dem_path, slope_path, aspect_path, contours_path, 
+                    hillshade_path, geomorphons_path, drainage_path,
+                    final_dem_path, data_source, 
+                    statistics, bounds, image, status,
+                    analysis_files, processing_steps,
+                    created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                 ON CONFLICT (polygon_id) DO UPDATE SET
                     user_id = EXCLUDED.user_id,
                     dem_path = EXCLUDED.dem_path,
                     slope_path = EXCLUDED.slope_path,
                     aspect_path = EXCLUDED.aspect_path,
                     contours_path = EXCLUDED.contours_path,
+                    hillshade_path = EXCLUDED.hillshade_path,
+                    geomorphons_path = EXCLUDED.geomorphons_path,
+                    drainage_path = EXCLUDED.drainage_path,
                     final_dem_path = EXCLUDED.final_dem_path,
                     data_source = EXCLUDED.data_source,
                     statistics = EXCLUDED.statistics,
+                    bounds = EXCLUDED.bounds,
+                    image = EXCLUDED.image,
+                    status = EXCLUDED.status,
+                    analysis_files = EXCLUDED.analysis_files,
+                    processing_steps = EXCLUDED.processing_steps,
                     updated_at = NOW()
             """, (
                 f"analysis_{polygon_id}",
@@ -189,9 +205,17 @@ class DatabaseService:
                 analysis_data.get('slope_path'),
                 analysis_data.get('aspect_path'),
                 analysis_data.get('contours_path'),
+                analysis_data.get('hillshade_path'),
+                analysis_data.get('geomorphons_path'),
+                analysis_data.get('drainage_path'),
                 analysis_data.get('final_dem_path'),
                 analysis_data.get('data_source'),
-                json.dumps(analysis_data)
+                json.dumps(analysis_data.get('statistics', {})),
+                json.dumps(analysis_data.get('bounds', {})),
+                analysis_data.get('image'),
+                analysis_data.get('status', 'completed'),
+                json.dumps(analysis_data.get('analysis_files', {})),
+                json.dumps(analysis_data.get('processing_steps', {}))
             ))
             
             conn.commit()
@@ -202,6 +226,36 @@ class DatabaseService:
             return {'status': 'success', 'message': 'Analysis results saved'}
         except Exception as e:
             logger.error(f"Error saving analysis results: {str(e)}")
+            if conn:
+                conn.rollback()
+                conn.close()
+            return {'status': 'error', 'message': str(e)}
+    
+    def update_analysis_status(self, polygon_id: str, status: str, error_message: Optional[str] = None) -> Dict[str, Any]:
+        """Update analysis status"""
+        if not self.enabled:
+            return {'status': 'disabled'}
+        
+        conn = self._get_connection()
+        if not conn:
+            return {'status': 'error', 'message': 'Database connection failed'}
+        
+        try:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE analyses 
+                SET status = %s, error_message = %s, updated_at = NOW()
+                WHERE polygon_id = %s
+            """, (status, error_message, polygon_id))
+            
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
+            logger.info(f"Updated analysis status for polygon {polygon_id}: {status}")
+            return {'status': 'success'}
+        except Exception as e:
+            logger.error(f"Error updating analysis status: {str(e)}")
             if conn:
                 conn.rollback()
                 conn.close()
