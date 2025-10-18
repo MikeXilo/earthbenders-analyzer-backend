@@ -257,10 +257,10 @@ class DEMProcessor:
                     return {
                         'clipped_dem_path': clipped_dem_path,
                         'bounds': {
-                            'min_lon': float(polygon.bounds[0]),
-                            'min_lat': float(polygon.bounds[1]),
-                            'max_lon': float(polygon.bounds[2]),
-                            'max_lat': float(polygon.bounds[3])
+                            'west': float(polygon.bounds[0]),
+                            'south': float(polygon.bounds[1]),
+                            'east': float(polygon.bounds[2]),
+                            'north': float(polygon.bounds[3])
                         },
                         'image': visualization_data,
                         'statistics': statistics,
@@ -293,9 +293,27 @@ class DEMProcessor:
                     logger.warning(f"No valid data found in {data_source} file")
                     return ""
                 
+                # DEBUG: Log data statistics
+                logger.info(f"=== ELEVATION DATA DEBUG ===")
+                logger.info(f"Total pixels: {elevation_data.size}")
+                logger.info(f"Valid pixels: {len(valid_data)}")
+                logger.info(f"NaN pixels: {np.sum(np.isnan(elevation_data))}")
+                logger.info(f"Data type: {elevation_data.dtype}")
+                logger.info(f"Raw data range: {np.nanmin(elevation_data)} to {np.nanmax(elevation_data)}")
+                
                 # Normalize data for visualization
                 min_elev = np.nanmin(valid_data)
                 max_elev = np.nanmax(valid_data)
+                
+                logger.info(f"Valid data range: {min_elev} to {max_elev}")
+                logger.info(f"Elevation difference: {max_elev - min_elev}")
+                
+                # Check if all values are the same (flat terrain)
+                if max_elev - min_elev == 0:
+                    logger.warning(f"FLAT TERRAIN DETECTED: All elevation values are {min_elev}")
+                    # For flat terrain, use a single color from the middle of the ramp
+                    min_elev = min_elev - 1  # Create small range for visualization
+                    max_elev = max_elev + 1
                 
                 # Create normalized array (0-1 range)
                 normalized = np.where(
@@ -307,6 +325,13 @@ class DEMProcessor:
                 # Apply color ramp (elevation-based colors)
                 colored_image = self._apply_elevation_colormap(normalized)
                 
+                # DEBUG: Log color mapping results
+                logger.info(f"=== COLOR MAPPING DEBUG ===")
+                logger.info(f"Normalized range: {np.nanmin(normalized)} to {np.nanmax(normalized)}")
+                logger.info(f"Colored image shape: {colored_image.shape}")
+                logger.info(f"Colored image range: {colored_image.min()} to {colored_image.max()}")
+                logger.info(f"Unique colors: {len(np.unique(colored_image.reshape(-1, colored_image.shape[-1]), axis=0))}")
+                
                 # Create RGBA image with transparency for NoData areas
                 rgba_image = np.zeros((*normalized.shape, 4), dtype=np.uint8)
                 
@@ -315,6 +340,13 @@ class DEMProcessor:
                 
                 # Set alpha channel: 255 for valid data, 0 for NoData
                 rgba_image[:, :, 3] = np.where(np.isnan(normalized), 0, 255)
+                
+                # DEBUG: Log final image stats
+                logger.info(f"=== FINAL IMAGE DEBUG ===")
+                logger.info(f"RGBA image shape: {rgba_image.shape}")
+                logger.info(f"Alpha channel range: {rgba_image[:, :, 3].min()} to {rgba_image[:, :, 3].max()}")
+                logger.info(f"Transparent pixels: {np.sum(rgba_image[:, :, 3] == 0)}")
+                logger.info(f"Opaque pixels: {np.sum(rgba_image[:, :, 3] == 255)}")
                 
                 # Create PIL Image with RGBA mode for transparency
                 img = Image.fromarray(rgba_image, mode='RGBA')
@@ -332,7 +364,7 @@ class DEMProcessor:
             return ""
     
     def _apply_elevation_colormap(self, normalized_data: np.ndarray) -> np.ndarray:
-        """Apply custom elevation color ramp for all data sources (SRTM, LIDAR PT, LIDAR US)"""
+        """Apply the exact 50-color elevation ramp with precise thresholds"""
         # Create a 3D array for RGB values
         colored = np.zeros((*normalized_data.shape, 3), dtype=np.uint8)
         
@@ -345,85 +377,120 @@ class DEMProcessor:
         # Get valid data
         valid_data = normalized_data[valid_mask]
         
-        # Define the custom color ramp (49 colors + boundary colors)
-        color_ramp = [
-            (16, 105, 40),   # Boundary Color (elev_norm<0.0)
-            (12, 130, 44),   # Ramp Color 1
-            (8, 155, 48),    # Ramp Color 2
-            (5, 181, 51),    # Ramp Color 3
-            (5, 199, 59),    # Ramp Color 4
-            (14, 203, 75),   # Ramp Color 5
-            (22, 208, 91),   # Ramp Color 6
-            (33, 212, 104),  # Ramp Color 7
-            (50, 215, 108),  # Ramp Color 8
-            (68, 219, 111),  # Ramp Color 9
-            (86, 222, 114),  # Ramp Color 10
-            (103, 225, 118), # Ramp Color 11
-            (121, 228, 122), # Ramp Color 12
-            (139, 231, 125), # Ramp Color 13
-            (157, 234, 129), # Ramp Color 14
-            (176, 238, 134), # Ramp Color 15
-            (195, 242, 139), # Ramp Color 16
-            (215, 246, 144), # Ramp Color 17
-            (226, 245, 146), # Ramp Color 18
-            (232, 240, 147), # Ramp Color 19
-            (238, 235, 147), # Ramp Color 20
-            (245, 229, 148), # Ramp Color 21
-            (233, 216, 140), # Ramp Color 22
-            (221, 202, 132), # Ramp Color 23
-            (209, 188, 124), # Ramp Color 24
-            (196, 173, 116), # Ramp Color 25
-            (185, 157, 109), # Ramp Color 26
-            (173, 141, 101), # Ramp Color 27
-            (162, 125, 94),  # Ramp Color 28
-            (156, 118, 91),  # Ramp Color 29
-            (151, 110, 89),  # Ramp Color 30
-            (146, 103, 86),  # Ramp Color 31
-            (145, 101, 88),  # Ramp Color 32
-            (150, 108, 97),  # Ramp Color 33
-            (155, 115, 105), # Ramp Color 34
-            (160, 123, 113), # Ramp Color 35
-            (166, 131, 121), # Ramp Color 36
-            (171, 138, 128), # Ramp Color 37
-            (177, 146, 137), # Ramp Color 38
-            (183, 153, 145), # Ramp Color 39
-            (189, 161, 153), # Ramp Color 40
-            (195, 169, 161), # Ramp Color 41
-            (201, 176, 169), # Ramp Color 42
-            (207, 184, 177), # Ramp Color 43
-            (213, 192, 185), # Ramp Color 44
-            (220, 200, 193), # Ramp Color 45
-            (226, 207, 201), # Ramp Color 46
-            (232, 215, 209), # Ramp Color 47
-            (238, 223, 217), # Ramp Color 48
-            (244, 231, 225), # Ramp Color 49
-            (255, 255, 255) # Boundary Color (elev_norm≥1.0)
-        ]
-        
-        # Convert to numpy array for efficient indexing
-        color_ramp = np.array(color_ramp, dtype=np.uint8)
-        
-        # Handle boundary cases
-        # Values < 0.0 get the first color
-        low_mask = valid_data < 0.0
-        colored[valid_mask][low_mask] = color_ramp[0]
-        
-        # Values >= 1.0 get the last color
-        high_mask = valid_data >= 1.0
-        colored[valid_mask][high_mask] = color_ramp[-1]
-        
-        # Values between 0.0 and 1.0 get interpolated colors
-        mid_mask = (valid_data >= 0.0) & (valid_data < 1.0)
-        if np.any(mid_mask):
-            mid_data = valid_data[mid_mask]
-            # Map 0.0-1.0 to 0-48 (49 ramp colors, excluding boundary colors)
-            color_indices = (mid_data * 48).astype(int)
-            # Ensure indices are within bounds
-            color_indices = np.clip(color_indices, 0, 48)
-            # Get colors (indices 1-49 in our array, since 0 is boundary color)
-            colored[valid_mask][mid_mask] = color_ramp[color_indices + 1]
+        # Apply the exact color function to each pixel
+        for i, elev_norm in enumerate(valid_data):
+            row, col = np.where(normalized_data == elev_norm)
+            if len(row) > 0:
+                r, c = row[0], col[0]
+                color = self._get_color_50_less_white(elev_norm)
+                colored[r, c] = color
         
         return colored
+    
+    def _get_color_50_less_white(self, elev_norm):
+        """50-color interpolated ramp from 0.0 to 1.0 (with white compressed to the last step)"""
+        if elev_norm < 0.0:
+            return (16, 105, 40)  # For values < 0.0 (dark green)
+        elif elev_norm < 0.020408:
+            return (12, 130, 44)
+        elif elev_norm < 0.040816:
+            return (8, 155, 48)
+        elif elev_norm < 0.061224:
+            return (5, 181, 51)
+        elif elev_norm < 0.081633:
+            return (5, 199, 59)
+        elif elev_norm < 0.102041:
+            return (14, 203, 75)
+        elif elev_norm < 0.122449:
+            return (22, 208, 91)
+        elif elev_norm < 0.142857:
+            return (33, 212, 104)
+        elif elev_norm < 0.163265:
+            return (50, 215, 108)
+        elif elev_norm < 0.183673:
+            return (68, 219, 111)
+        elif elev_norm < 0.204082:
+            return (86, 222, 114)
+        elif elev_norm < 0.224490:
+            return (103, 225, 118)
+        elif elev_norm < 0.244898:
+            return (121, 228, 122)
+        elif elev_norm < 0.265306:
+            return (139, 231, 125)
+        elif elev_norm < 0.285714:
+            return (157, 234, 129)
+        elif elev_norm < 0.306122:
+            return (176, 238, 134)
+        elif elev_norm < 0.326531:
+            return (195, 242, 139)
+        elif elev_norm < 0.346939:
+            return (215, 246, 144)
+        elif elev_norm < 0.367347:
+            return (226, 245, 146)
+        elif elev_norm < 0.387755:
+            return (232, 240, 147)
+        elif elev_norm < 0.408163:
+            return (238, 235, 147)
+        elif elev_norm < 0.428571:
+            return (245, 229, 148)
+        elif elev_norm < 0.448980:
+            return (233, 216, 140)
+        elif elev_norm < 0.469388:
+            return (221, 202, 132)
+        elif elev_norm < 0.489796:
+            return (209, 188, 124)
+        elif elev_norm < 0.510204:
+            return (196, 173, 116)
+        elif elev_norm < 0.530612:
+            return (185, 157, 109)
+        elif elev_norm < 0.551020:
+            return (173, 141, 101)
+        elif elev_norm < 0.571429:
+            return (162, 125, 94)
+        elif elev_norm < 0.591837:
+            return (156, 118, 91)
+        elif elev_norm < 0.612245:
+            return (151, 110, 89)
+        elif elev_norm < 0.632653:
+            return (146, 103, 86)
+        elif elev_norm < 0.653061:
+            return (145, 101, 88)
+        elif elev_norm < 0.673469:
+            return (150, 108, 97)
+        elif elev_norm < 0.693878:
+            return (155, 115, 105)
+        elif elev_norm < 0.714286:
+            return (160, 123, 113)
+        elif elev_norm < 0.734694:
+            return (166, 131, 121)
+        elif elev_norm < 0.755102:
+            return (171, 138, 128)
+        elif elev_norm < 0.775510:
+            return (177, 146, 137)
+        elif elev_norm < 0.795918:
+            return (183, 153, 145)
+        elif elev_norm < 0.816327:
+            return (189, 161, 153)
+        elif elev_norm < 0.836735:
+            return (195, 169, 161)
+        elif elev_norm < 0.857143:
+            return (201, 176, 169)
+        elif elev_norm < 0.877551:
+            return (207, 184, 177)
+        elif elev_norm < 0.897959:
+            return (213, 192, 185)
+        elif elev_norm < 0.918367:
+            return (220, 200, 193)
+        elif elev_norm < 0.938776:
+            return (226, 207, 201)
+        elif elev_norm < 0.959184:
+            return (232, 215, 209)
+        elif elev_norm < 0.979592:
+            return (238, 223, 217)
+        elif elev_norm < 1.0:
+            return (244, 231, 225)
+        else:  # elev_norm >= 1.0
+            return (255, 255, 255)  # White for highest elevations
     
     def _calculate_statistics(self, dem_path: str, data_source: str) -> Dict[str, Any]:
         """Calculate terrain statistics for DEM data"""

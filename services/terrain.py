@@ -840,10 +840,23 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
         # Initialize alpha to transparent everywhere
         rgba[:,:,3] = 0
         
+        # Create mask for valid data (not NoData)
+        valid_mask = ~np.isnan(aspect_data)
+        
+        # Handle different NoData values based on the nodata_value we detected
+        if nodata_value is not None:
+            if np.isnan(nodata_value):
+                # For NaN nodata, we already have the mask
+                pass
+            else:
+                # For integer nodata values (like -9999, -32768)
+                valid_mask = valid_mask & (aspect_data != nodata_value)
+        
         # Apply colors based on aspect direction
         for i in range(aspect_data.shape[0]):
             for j in range(aspect_data.shape[1]):
-                if np.isnan(aspect_data[i, j]):
+                # Skip NoData pixels
+                if not valid_mask[i, j]:
                     continue
                     
                 aspect_val = aspect_data[i, j]
@@ -873,8 +886,8 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
                 rgba[i, j, 2] = color[2]  # B
                 rgba[i, j, 3] = 255       # Alpha
         
-        # Set alpha channel - transparent for NaN values
-        rgba[np.isnan(aspect_data), 3] = 0
+        # Set alpha channel - transparent for NoData values
+        rgba[~valid_mask, 3] = 0
         
         # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
@@ -888,8 +901,8 @@ def visualize_aspect(aspect_file_path, polygon_data=None):
         img_upscaled.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
-        # Calculate min/max for display
-        valid_data = aspect_data[~np.isnan(aspect_data)]
+        # Calculate min/max for display using the same valid mask
+        valid_data = aspect_data[valid_mask]
         aspect_min = np.min(valid_data) if valid_data.size > 0 else 0
         aspect_max = np.max(valid_data) if valid_data.size > 0 else 360
         
