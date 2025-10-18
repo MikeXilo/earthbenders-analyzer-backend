@@ -52,7 +52,7 @@ def register_routes(app):
                         a.polygon_id,
                         a.user_id,
                         a.statistics,
-                        a.srtm_path,
+                        a.dem_path,
                         a.slope_path,
                         a.aspect_path,
                         a.contours_path,
@@ -112,7 +112,7 @@ def register_routes(app):
                     
                     # Create analysis files object
                     analysis_files = {
-                        'srtm': row['srtm_path'],
+                        'srtm': row['dem_path'],
                         'slope': row['slope_path'],
                         'aspect': row['aspect_path'],
                         'contours': row['contours_path'],
@@ -224,7 +224,7 @@ def register_routes(app):
                         a.polygon_id,
                         a.user_id,
                         a.statistics,
-                        a.srtm_path,
+                        a.dem_path,
                         a.slope_path,
                         a.aspect_path,
                         a.contours_path,

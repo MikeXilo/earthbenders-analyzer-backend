@@ -397,6 +397,9 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
             bounds = src.bounds
             profile = src.profile
             nodata_value = get_nodata_value(src)
+            
+            logger.info(f"Geomorphons dtype: {geomorphons_data.dtype}, nodata: {nodata_value}")
+            logger.info(f"Geomorphons data range: {np.min(geomorphons_data)} to {np.max(geomorphons_data)}")
         
         # Mask using the polygon if available
         if polygon_data:
@@ -440,19 +443,57 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         # Create a colormapped image
         rgba = np.zeros((geomorphons_data.shape[0], geomorphons_data.shape[1], 4), dtype=np.uint8)
         
-        # Initialize alpha to transparent everywhere
-        rgba[:,:,3] = 0
+        # ✅ BUILD COMPREHENSIVE VALID DATA MASK
+        valid_mask = np.ones(geomorphons_data.shape, dtype=bool)
         
-        # Apply colors for each landform type
+        # 1. Handle NaN values (for float dtypes)
+        if np.issubdtype(geomorphons_data.dtype, np.floating):
+            nan_mask = np.isnan(geomorphons_data)
+            valid_mask &= ~nan_mask
+            logger.info(f"Found {np.sum(nan_mask)} NaN values")
+        
+        # 2. Handle specific nodata value from raster metadata
+        if nodata_value is not None:
+            if np.isnan(nodata_value):
+                # Already handled above
+                pass
+            else:
+                # Integer nodata value (e.g., -32768, -9999, 0)
+                nodata_mask = (geomorphons_data == nodata_value)
+                valid_mask &= ~nodata_mask
+                logger.info(f"Found {np.sum(nodata_mask)} pixels with nodata value {nodata_value}")
+        
+        # 3. Exclude values outside valid geomorphon range (1-10)
+        # This catches any unexpected values
+        range_mask = (geomorphons_data >= 1) & (geomorphons_data <= 10)
+        invalid_range = ~range_mask & valid_mask  # Only count as invalid if not already marked as nodata
+        valid_mask &= range_mask
+        logger.info(f"Found {np.sum(invalid_range)} pixels outside valid range [1,10]")
+        
+        # 4. Log final statistics
+        logger.info(f"Geomorphons: {np.sum(valid_mask)} valid pixels out of {geomorphons_data.size} total")
+        if np.sum(valid_mask) > 0:
+            unique_values = np.unique(geomorphons_data[valid_mask])
+            logger.info(f"Unique geomorphon values present: {unique_values}")
+            
+            # Count pixels per landform type
+            for landform_type in landform_colors.keys():
+                count = np.sum(geomorphons_data[valid_mask] == landform_type)
+                if count > 0:
+                    logger.info(f"  Landform {landform_type}: {count} pixels")
+        else:
+            logger.warning("No valid geomorphon data found!")
+        
+        # ✅ APPLY COLORS ONLY TO VALID PIXELS
         for landform_type, color in landform_colors.items():
-            mask = geomorphons_data == landform_type
-            rgba[mask, 0] = color[0]  # R
-            rgba[mask, 1] = color[1]  # G
-            rgba[mask, 2] = color[2]  # B
-            rgba[mask, 3] = 255       # Alpha (fully opaque for valid data)
+            landform_mask = valid_mask & (geomorphons_data == landform_type)
+            rgba[landform_mask, 0] = color[0]  # R
+            rgba[landform_mask, 1] = color[1]  # G
+            rgba[landform_mask, 2] = color[2]  # B
+            rgba[landform_mask, 3] = 255       # Alpha (opaque)
         
-        # Set alpha channel - transparent for NaN values
-        rgba[np.isnan(geomorphons_data), 3] = 0
+        # ✅ MAKE INVALID PIXELS TRANSPARENT
+        rgba[~valid_mask, 3] = 0
         
         # Convert to PIL Image and upscale for higher resolution
         img = Image.fromarray(rgba)
@@ -466,8 +507,8 @@ def visualize_geomorphons(geomorphons_file_path, polygon_data=None):
         img_upscaled.save(buffered, format="PNG", optimize=True)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
-        # Calculate min/max for display
-        valid_data = geomorphons_data[~np.isnan(geomorphons_data)]
+        # Calculate min/max using valid mask
+        valid_data = geomorphons_data[valid_mask]
         geomorphons_min = np.min(valid_data) if valid_data.size > 0 else 1
         geomorphons_max = np.max(valid_data) if valid_data.size > 0 else 10
         

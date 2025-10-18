@@ -338,8 +338,17 @@ class DEMProcessor:
                 # Set RGB values from colormap
                 rgba_image[:, :, :3] = colored_image
                 
-                # Set alpha channel: 255 for valid data, 0 for NoData
-                rgba_image[:, :, 3] = np.where(np.isnan(normalized), 0, 255)
+                # ✅ CRITICAL: Set alpha ONLY where we have valid data
+                alpha_mask = ~np.isnan(normalized)
+                rgba_image[:, :, 3] = np.where(alpha_mask, 255, 0)
+                
+                # ✅ SAFETY: Ensure black pixels with alpha=0 are truly nodata
+                # Don't confuse black elevation colors with nodata
+                black_pixels = np.all(colored_image == 0, axis=2)
+                valid_black = alpha_mask & black_pixels  # Black is valid if it's in alpha mask
+                rgba_image[black_pixels & ~valid_black, 3] = 0  # Make invalid black transparent
+                
+                logger.info(f"Final RGBA: {np.sum(rgba_image[:,:,3] == 255)} opaque, {np.sum(rgba_image[:,:,3] == 0)} transparent")
                 
                 # DEBUG: Log final image stats
                 logger.info(f"=== FINAL IMAGE DEBUG ===")
@@ -364,133 +373,100 @@ class DEMProcessor:
             return ""
     
     def _apply_elevation_colormap(self, normalized_data: np.ndarray) -> np.ndarray:
-        """Apply the exact 50-color elevation ramp with precise thresholds"""
-        # Create a 3D array for RGB values
+        """Apply the exact 50-color elevation ramp with precise thresholds - VECTORIZED"""
+        # Create a 3D array for RGB values initialized to transparent (will be handled by alpha channel)
         colored = np.zeros((*normalized_data.shape, 3), dtype=np.uint8)
         
         # Create mask for valid (non-NaN) data
         valid_mask = ~np.isnan(normalized_data)
         
         if not np.any(valid_mask):
+            logger.warning("No valid data to colorize")
             return colored
         
-        # Get valid data
-        valid_data = normalized_data[valid_mask]
+        logger.info(f"Coloring {np.sum(valid_mask)} valid pixels out of {normalized_data.size} total")
         
-        # Apply the exact color function to each pixel
-        for i, elev_norm in enumerate(valid_data):
-            row, col = np.where(normalized_data == elev_norm)
-            if len(row) > 0:
-                r, c = row[0], col[0]
-                color = self._get_color_50_less_white(elev_norm)
-                colored[r, c] = color
+        # Define color thresholds and RGB values
+        # Format: (threshold, (R, G, B))
+        color_stops = [
+            (0.0,      (16, 105, 40)),
+            (0.020408, (12, 130, 44)),
+            (0.040816, (8, 155, 48)),
+            (0.061224, (5, 181, 51)),
+            (0.081633, (5, 199, 59)),
+            (0.102041, (14, 203, 75)),
+            (0.122449, (22, 208, 91)),
+            (0.142857, (33, 212, 104)),
+            (0.163265, (50, 215, 108)),
+            (0.183673, (68, 219, 111)),
+            (0.204082, (86, 222, 114)),
+            (0.224490, (103, 225, 118)),
+            (0.244898, (121, 228, 122)),
+            (0.265306, (139, 231, 125)),
+            (0.285714, (157, 234, 129)),
+            (0.306122, (176, 238, 134)),
+            (0.326531, (195, 242, 139)),
+            (0.346939, (215, 246, 144)),
+            (0.367347, (226, 245, 146)),
+            (0.387755, (232, 240, 147)),
+            (0.408163, (238, 235, 147)),
+            (0.428571, (245, 229, 148)),
+            (0.448980, (233, 216, 140)),
+            (0.469388, (221, 202, 132)),
+            (0.489796, (209, 188, 124)),
+            (0.510204, (196, 173, 116)),
+            (0.530612, (185, 157, 109)),
+            (0.551020, (173, 141, 101)),
+            (0.571429, (162, 125, 94)),
+            (0.591837, (156, 118, 91)),
+            (0.612245, (151, 110, 89)),
+            (0.632653, (146, 103, 86)),
+            (0.653061, (145, 101, 88)),
+            (0.673469, (150, 108, 97)),
+            (0.693878, (155, 115, 105)),
+            (0.714286, (160, 123, 113)),
+            (0.734694, (166, 131, 121)),
+            (0.755102, (171, 138, 128)),
+            (0.775510, (177, 146, 137)),
+            (0.795918, (183, 153, 145)),
+            (0.816327, (189, 161, 153)),
+            (0.836735, (195, 169, 161)),
+            (0.857143, (201, 176, 169)),
+            (0.877551, (207, 184, 177)),
+            (0.897959, (213, 192, 185)),
+            (0.918367, (220, 200, 193)),
+            (0.938776, (226, 207, 201)),
+            (0.959184, (232, 215, 209)),
+            (0.979592, (238, 223, 217)),
+            (1.0,      (244, 231, 225)),
+            (float('inf'), (255, 255, 255))  # Above 1.0
+        ]
+        
+        # ✅ VECTORIZED COLOR ASSIGNMENT - Process all pixels at once
+        for i in range(len(color_stops) - 1):
+            threshold_low = color_stops[i][0]
+            threshold_high = color_stops[i + 1][0]
+            color = color_stops[i][1]  # ✅ Use the current threshold's color (not next!)
+            
+            # Create mask for pixels in this threshold range
+            mask = valid_mask & (normalized_data >= threshold_low) & (normalized_data < threshold_high)
+            
+            # Assign color to all pixels in this range at once
+            colored[mask, 0] = color[0]  # R
+            colored[mask, 1] = color[1]  # G
+            colored[mask, 2] = color[2]  # B
+        
+        # Handle edge case for exactly 1.0 and above
+        exact_one_or_above = valid_mask & (normalized_data >= 1.0)
+        if np.any(exact_one_or_above):
+            colored[exact_one_or_above, 0] = 255
+            colored[exact_one_or_above, 1] = 255
+            colored[exact_one_or_above, 2] = 255
+        
+        logger.info(f"Color mapping complete. Non-zero pixels: {np.sum(np.any(colored > 0, axis=2))}")
         
         return colored
     
-    def _get_color_50_less_white(self, elev_norm):
-        """50-color interpolated ramp from 0.0 to 1.0 (with white compressed to the last step)"""
-        if elev_norm < 0.0:
-            return (16, 105, 40)  # For values < 0.0 (dark green)
-        elif elev_norm < 0.020408:
-            return (12, 130, 44)
-        elif elev_norm < 0.040816:
-            return (8, 155, 48)
-        elif elev_norm < 0.061224:
-            return (5, 181, 51)
-        elif elev_norm < 0.081633:
-            return (5, 199, 59)
-        elif elev_norm < 0.102041:
-            return (14, 203, 75)
-        elif elev_norm < 0.122449:
-            return (22, 208, 91)
-        elif elev_norm < 0.142857:
-            return (33, 212, 104)
-        elif elev_norm < 0.163265:
-            return (50, 215, 108)
-        elif elev_norm < 0.183673:
-            return (68, 219, 111)
-        elif elev_norm < 0.204082:
-            return (86, 222, 114)
-        elif elev_norm < 0.224490:
-            return (103, 225, 118)
-        elif elev_norm < 0.244898:
-            return (121, 228, 122)
-        elif elev_norm < 0.265306:
-            return (139, 231, 125)
-        elif elev_norm < 0.285714:
-            return (157, 234, 129)
-        elif elev_norm < 0.306122:
-            return (176, 238, 134)
-        elif elev_norm < 0.326531:
-            return (195, 242, 139)
-        elif elev_norm < 0.346939:
-            return (215, 246, 144)
-        elif elev_norm < 0.367347:
-            return (226, 245, 146)
-        elif elev_norm < 0.387755:
-            return (232, 240, 147)
-        elif elev_norm < 0.408163:
-            return (238, 235, 147)
-        elif elev_norm < 0.428571:
-            return (245, 229, 148)
-        elif elev_norm < 0.448980:
-            return (233, 216, 140)
-        elif elev_norm < 0.469388:
-            return (221, 202, 132)
-        elif elev_norm < 0.489796:
-            return (209, 188, 124)
-        elif elev_norm < 0.510204:
-            return (196, 173, 116)
-        elif elev_norm < 0.530612:
-            return (185, 157, 109)
-        elif elev_norm < 0.551020:
-            return (173, 141, 101)
-        elif elev_norm < 0.571429:
-            return (162, 125, 94)
-        elif elev_norm < 0.591837:
-            return (156, 118, 91)
-        elif elev_norm < 0.612245:
-            return (151, 110, 89)
-        elif elev_norm < 0.632653:
-            return (146, 103, 86)
-        elif elev_norm < 0.653061:
-            return (145, 101, 88)
-        elif elev_norm < 0.673469:
-            return (150, 108, 97)
-        elif elev_norm < 0.693878:
-            return (155, 115, 105)
-        elif elev_norm < 0.714286:
-            return (160, 123, 113)
-        elif elev_norm < 0.734694:
-            return (166, 131, 121)
-        elif elev_norm < 0.755102:
-            return (171, 138, 128)
-        elif elev_norm < 0.775510:
-            return (177, 146, 137)
-        elif elev_norm < 0.795918:
-            return (183, 153, 145)
-        elif elev_norm < 0.816327:
-            return (189, 161, 153)
-        elif elev_norm < 0.836735:
-            return (195, 169, 161)
-        elif elev_norm < 0.857143:
-            return (201, 176, 169)
-        elif elev_norm < 0.877551:
-            return (207, 184, 177)
-        elif elev_norm < 0.897959:
-            return (213, 192, 185)
-        elif elev_norm < 0.918367:
-            return (220, 200, 193)
-        elif elev_norm < 0.938776:
-            return (226, 207, 201)
-        elif elev_norm < 0.959184:
-            return (232, 215, 209)
-        elif elev_norm < 0.979592:
-            return (238, 223, 217)
-        elif elev_norm < 1.0:
-            return (244, 231, 225)
-        else:  # elev_norm >= 1.0
-            return (255, 255, 255)  # White for highest elevations
     
     def _calculate_statistics(self, dem_path: str, data_source: str) -> Dict[str, Any]:
         """Calculate terrain statistics for DEM data"""
