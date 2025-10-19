@@ -44,17 +44,46 @@ class WaterHarvestingService:
         logger.info(f"Calculating water harvesting for polygon {polygon_id}")
         
         try:
-            # 1. Calculate area
-            area_m2 = self._calculate_area_m2(polygon_geometry)
-            area_hectares = area_m2 / 10000
-            area_acres = area_hectares * 2.471
+            # 1. Try to get existing statistics from database first
+            existing_stats = self._get_existing_statistics(polygon_id)
+            
+            if existing_stats:
+                logger.info(f"✅ Using existing statistics for polygon {polygon_id}")
+                # Use existing data
+                area_km2 = existing_stats.get('area_km2', 0)
+                area_hectares = area_km2 * 100  # Convert km² to hectares
+                area_m2 = area_hectares * 10000
+                area_acres = area_hectares * 2.471
+                
+                # Get location from bounds
+                bounds = existing_stats.get('bounds', {})
+                if bounds:
+                    # Calculate centroid from bounds
+                    lat = (bounds.get('north', 0) + bounds.get('south', 0)) / 2
+                    lon = (bounds.get('east', 0) + bounds.get('west', 0)) / 2
+                else:
+                    # Fallback to geometry centroid
+                    centroid = self._get_centroid(polygon_geometry)
+                    lat, lon = centroid
+                
+                # Use existing slope if available, otherwise use provided slope
+                if existing_stats.get('slope_mean') is not None:
+                    average_slope_percent = existing_stats['slope_mean']
+                    logger.info(f"✅ Using existing slope from statistics: {average_slope_percent}%")
+                else:
+                    logger.info(f"⚠️ No existing slope data, using provided: {average_slope_percent}%")
+            else:
+                logger.info(f"ℹ️ No existing statistics found, calculating from geometry")
+                # Fallback to original calculation
+                area_m2 = self._calculate_area_m2(polygon_geometry)
+                area_hectares = area_m2 / 10000
+                area_acres = area_hectares * 2.471
+                
+                # Get centroid for location-based queries
+                centroid = self._get_centroid(polygon_geometry)
+                lat, lon = centroid
             
             logger.info(f"Area: {area_hectares:.2f} ha ({area_acres:.2f} acres)")
-            
-            # 2. Get centroid for location-based queries
-            centroid = self._get_centroid(polygon_geometry)
-            lat, lon = centroid
-            
             logger.info(f"Location: ({lat:.4f}, {lon:.4f})")
             
             # 3. Get real annual rainfall from API
@@ -841,6 +870,24 @@ class WaterHarvestingService:
             }
         }
     
+    def _get_existing_statistics(self, polygon_id):
+        """Get existing statistics from database for this polygon"""
+        try:
+            from services.database import DatabaseService
+            db = DatabaseService()
+            analysis_data = db.get_analysis_by_polygon_id(polygon_id)
+            
+            if analysis_data and analysis_data.get('statistics'):
+                logger.info(f"Found existing statistics for polygon {polygon_id}")
+                return analysis_data['statistics']
+            else:
+                logger.info(f"No existing statistics found for polygon {polygon_id}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error retrieving existing statistics: {e}")
+            return None
+
     def _save_water_harvesting_results(self, polygon_id, user_id, results):
         """Save results to database"""
         try:

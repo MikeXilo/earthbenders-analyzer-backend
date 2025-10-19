@@ -114,6 +114,59 @@ def calculate_water_harvesting():
             'error': f'Water harvesting calculation failed: {str(e)}'
         }), 500
 
+@water_harvesting_bp.route('/api/water-harvesting/<polygon_id>', methods=['GET'])
+def get_water_harvesting(polygon_id):
+    """
+    Retrieve existing water harvesting data for a polygon
+    
+    Returns:
+    {
+        "status": "success",
+        "water_harvesting": {
+            "area_hectares": 5.2,
+            "climate": {
+                "annual_rainfall_mm": 774
+            },
+            ...
+        }
+    }
+    """
+    try:
+        from services.database import DatabaseService
+        
+        db = DatabaseService()
+        
+        # Get analysis data for the polygon
+        analysis_data = db.get_analysis_by_polygon_id(polygon_id)
+        
+        if not analysis_data:
+            return jsonify({
+                'status': 'error',
+                'message': f'No analysis found for polygon {polygon_id}'
+            }), 404
+        
+        # Extract water harvesting data from statistics
+        statistics = analysis_data.get('statistics', {})
+        water_harvesting = statistics.get('water_harvesting')
+        
+        if not water_harvesting:
+            return jsonify({
+                'status': 'error',
+                'message': f'No water harvesting data found for polygon {polygon_id}'
+            }), 404
+        
+        return jsonify({
+            'status': 'success',
+            'water_harvesting': water_harvesting
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error retrieving water harvesting data: {str(e)}", exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to retrieve water harvesting data: {str(e)}'
+        }), 500
+
 @water_harvesting_bp.route('/api/water-harvesting/health', methods=['GET'])
 def health_check():
     """Health check endpoint for water harvesting service"""
