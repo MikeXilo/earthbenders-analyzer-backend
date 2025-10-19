@@ -1,0 +1,56 @@
+[33mcommit 301e398c88dd6e899d11fa8be1befa5422aafcf2[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Your Name <your.email@example.com>
+Date:   Sun Oct 19 18:13:09 2025 +0300
+
+    minor fix in the slopes of the water calc
+
+[1mdiff --git a/routes/water_harvesting.py b/routes/water_harvesting.py[m
+[1mindex 77aaed4..ae2e1a5 100644[m
+[1m--- a/routes/water_harvesting.py[m
+[1m+++ b/routes/water_harvesting.py[m
+[36m@@ -26,7 +26,7 @@[m [mdef calculate_water_harvesting():[m
+             "coordinates": [[[lon, lat], ...]][m
+         },[m
+         "polygon_id": "unique_polygon_identifier",[m
+[31m-        "average_slope_percent": 12.5,[m
+[32m+[m[32m        "average_slope_percent": 12.5,  // Optional - will use existing statistics if available[m[41m[m
+         "user_id": "optional_user_identifier"[m
+     }[m
+     [m
+[36m@@ -70,9 +70,11 @@[m [mdef calculate_water_harvesting():[m
+         if not polygon_id:[m
+             return jsonify({'error': 'polygon_id is required'}), 400[m
+         [m
+[32m+[m[32m        # Make slope optional - water harvesting service will use existing statistics if available[m[41m[m
+         average_slope_percent = data.get('average_slope_percent')[m
+         if average_slope_percent is None:[m
+[31m-            return jsonify({'error': 'average_slope_percent is required (in percent, e.g., 12.5 for 12.5%)'}), 400[m
+[32m+[m[32m            # Set a default value, but water harvesting service will override with existing statistics if available[m[41m[m
+[32m+[m[32m            average_slope_percent = 10.0  # Default fallback[m[41m[m
+         [m
+         # Optional fields[m
+         user_id = data.get('user_id')[m
+[36m@@ -85,13 +87,16 @@[m [mdef calculate_water_harvesting():[m
+         if not coordinates or not isinstance(coordinates, list) or len(coordinates) == 0:[m
+             return jsonify({'error': 'Invalid polygon coordinates'}), 400[m
+         [m
+[31m-        # Validate slope[m
+[31m-        try:[m
+[31m-            slope = float(average_slope_percent)[m
+[31m-            if slope < 0 or slope > 100:[m
+[31m-                return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400[m
+[31m-        except (ValueError, TypeError):[m
+[31m-            return jsonify({'error': 'average_slope_percent must be a number'}), 400[m
+[32m+[m[32m        # Validate slope only if provided[m[41m[m
+[32m+[m[32m        if average_slope_percent is not None:[m[41m[m
+[32m+[m[32m            try:[m[41m[m
+[32m+[m[32m                slope = float(average_slope_percent)[m[41m[m
+[32m+[m[32m                if slope < 0 or slope > 100:[m[41m[m
+[32m+[m[32m                    return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400[m[41m[m
+[32m+[m[32m            except (ValueError, TypeError):[m[41m[m
+[32m+[m[32m                return jsonify({'error': 'average_slope_percent must be a number'}), 400[m[41m[m
+[32m+[m[32m        else:[m[41m[m
+[32m+[m[32m            slope = 10.0  # Default fallback[m[41m[m
+         [m
+         logger.info(f"Calculating water harvesting for polygon {polygon_id} with {slope}% slope")[m
+         [m

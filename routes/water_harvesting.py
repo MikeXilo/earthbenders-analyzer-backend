@@ -26,9 +26,14 @@ def calculate_water_harvesting():
             "coordinates": [[[lon, lat], ...]]
         },
         "polygon_id": "unique_polygon_identifier",
-        "average_slope_percent": 12.5,
+        "average_slope_percent": 12.5,  // OPTIONAL - will use existing terrain analysis if available
         "user_id": "optional_user_identifier"
     }
+    
+    Smart Slope Detection:
+    - If average_slope_percent is provided: Uses the provided value
+    - If average_slope_percent is omitted: Automatically uses slope_mean from existing terrain analysis
+    - If no terrain analysis exists: Returns helpful error message
     
     Returns:
     {
@@ -70,9 +75,56 @@ def calculate_water_harvesting():
         if not polygon_id:
             return jsonify({'error': 'polygon_id is required'}), 400
         
+        # Smart slope detection: Use existing data or require manual input
         average_slope_percent = data.get('average_slope_percent')
+        slope_source = 'manual'
+        
         if average_slope_percent is None:
-            return jsonify({'error': 'average_slope_percent is required (in percent, e.g., 12.5 for 12.5%)'}), 400
+            logger.info(f"No slope provided, checking existing terrain analysis for {polygon_id}")
+            
+            from services.database import DatabaseService
+            db = DatabaseService()
+            analysis_data = db.get_analysis_record(polygon_id)
+            
+            if analysis_data:
+                statistics = analysis_data.get('statistics')
+                
+                if statistics:
+                    # Handle both string and dict formats
+                    if isinstance(statistics, str):
+                        import json
+                        statistics = json.loads(statistics)
+                    
+                    # ✅ CORRECT: Access slope_mean directly from statistics
+                    existing_slope = statistics.get('slope_mean')
+                    
+                    if existing_slope is not None and existing_slope > 0:
+                        average_slope_percent = existing_slope
+                        slope_source = 'terrain_analysis'
+                        logger.info(f"✅ Using existing slope from terrain analysis: {average_slope_percent}%")
+                        logger.info(f"   Slope stats: min={statistics.get('slope_min')}%, max={statistics.get('slope_max')}%, std={statistics.get('slope_std')}%")
+                    else:
+                        logger.warning(f"⚠️ Slope data exists but is invalid: slope_mean={existing_slope}")
+                else:
+                    logger.warning(f"⚠️ No statistics found in analysis for {polygon_id}")
+            else:
+                logger.warning(f"⚠️ No analysis record found for {polygon_id}")
+        
+        # If still no slope data, return helpful error
+        if average_slope_percent is None:
+            return jsonify({
+                'error': 'average_slope_percent is required',
+                'message': 'No slope data available. Please either:\n1. Run slope analysis first (recommended): POST /process_slopes\n2. Provide average_slope_percent manually in the request',
+                'help': {
+                    'recommended': 'Run terrain analysis to calculate slopes automatically',
+                    'quick': 'Provide "average_slope_percent" in request body (0-100)',
+                    'example': {
+                        "polygon_geometry": {"type": "Polygon", "coordinates": [[[...]]]},
+                        "polygon_id": polygon_id,
+                        "average_slope_percent": 15.5
+                    }
+                }
+            }), 400
         
         # Optional fields
         user_id = data.get('user_id')
@@ -93,7 +145,32 @@ def calculate_water_harvesting():
         except (ValueError, TypeError):
             return jsonify({'error': 'average_slope_percent must be a number'}), 400
         
-        logger.info(f"Calculating water harvesting for polygon {polygon_id} with {slope}% slope")
+        logger.info(f"🌊 Calculating water harvesting for polygon {polygon_id}")
+        logger.info(f"   Slope: {slope}% (source: {slope_source})")
+        
+        # ⚠️ Steep slope warnings
+        slope_warnings = []
+        if slope > 30:
+            slope_warnings.append({
+                'type': 'steep_slope_warning',
+                'message': f'Very steep slope detected ({slope}%) - high erosion risk',
+                'recommendations': [
+                    'Consider terracing or swales to slow water flow',
+                    'Implement vegetation for slope stabilization',
+                    'Use downslope storage systems',
+                    'Monitor for erosion after heavy rainfall'
+                ]
+            })
+        elif slope > 15:
+            slope_warnings.append({
+                'type': 'moderate_slope_info',
+                'message': f'Moderate slope ({slope}%) - good for water harvesting',
+                'recommendations': [
+                    'Consider contour swales for water capture',
+                    'Plant vegetation to reduce runoff',
+                    'Use berms to direct water flow'
+                ]
+            })
         
         # Calculate water harvesting potential and save to database
         water_analysis = water_service.calculate_water_harvesting_potential(
@@ -103,9 +180,30 @@ def calculate_water_harvesting():
             user_id=user_id
         )
         
+        # Add metadata to response
+        water_analysis['_metadata'] = {
+            'slope_source': slope_source,
+            'calculation_date': water_analysis.get('processed_at'),
+            'data_quality': {
+                'slope_data': 'from_terrain_analysis' if slope_source == 'terrain_analysis' else 'manual_input',
+                'rainfall_data': 'real_api_data',
+                'soil_data': 'real_api_data'
+            },
+            'slope_analysis': {
+                'slope_percent': slope,
+                'slope_category': 'very_steep' if slope > 30 else 'moderate' if slope > 15 else 'gentle',
+                'runoff_characteristics': 'high_runoff' if slope > 30 else 'moderate_runoff' if slope > 15 else 'low_runoff'
+            }
+        }
+        
+        # Add warnings if any
+        if slope_warnings:
+            water_analysis['_warnings'] = slope_warnings
+        
         return jsonify({
             'status': 'success',
-            'water_harvesting': water_analysis
+            'water_harvesting': water_analysis,
+            'message': f'Water harvesting calculated successfully using {slope_source} slope data'
         }), 200
         
     except Exception as e:

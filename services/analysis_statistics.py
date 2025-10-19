@@ -122,16 +122,32 @@ def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: st
             logger.error("CRITICAL: No valid elevation data found after masking!")
         
         # Calculate slope statistics (only if slope data exists)
-        slope_mean = float(np.mean(slope_masked)) if len(slope_masked) > 0 and slope_exists else 0
-        slope_min = float(np.min(slope_masked)) if len(slope_masked) > 0 and slope_exists else 0
-        slope_max = float(np.max(slope_masked)) if len(slope_masked) > 0 and slope_exists else 0
-        slope_std = float(np.std(slope_masked)) if len(slope_masked) > 0 and slope_exists else 0
+        if slope_exists and len(slope_masked) > 0:
+            slope_mean = float(np.mean(slope_masked))
+            slope_min = float(np.min(slope_masked))
+            slope_max = float(np.max(slope_masked))
+            slope_std = float(np.std(slope_masked))
+            logger.info(f"Slope statistics calculated: mean={slope_mean}, max={slope_max}")
+        else:
+            slope_mean = None
+            slope_min = None
+            slope_max = None
+            slope_std = None
+            logger.info("Slope data not available - using None values")
         
         # Calculate aspect statistics (only if aspect data exists)
-        aspect_mean = float(np.mean(aspect_masked)) if len(aspect_masked) > 0 and aspect_exists else 0
+        if aspect_exists and len(aspect_masked) > 0:
+            aspect_mean = float(np.mean(aspect_masked))
+            logger.info(f"Aspect statistics calculated: mean={aspect_mean}")
+        else:
+            aspect_mean = None
+            logger.info("Aspect data not available - using None values")
         
         # Determine aspect direction
-        aspect_direction = get_aspect_direction(aspect_mean) if aspect_exists else "Unknown"
+        if aspect_mean is not None:
+            aspect_direction = get_aspect_direction(aspect_mean)
+        else:
+            aspect_direction = "Not calculated"
         
         # Calculate area using actual raster resolution
         pixel_count = len(dem_masked)
@@ -175,12 +191,12 @@ def calculate_terrain_statistics(dem_path: str, slope_path: str, aspect_path: st
             'bounds': bounds,
             'relief': clean_nan_values(round(relief, 2) if relief is not None else None),
             'area_km2': clean_nan_values(round(area_km2, 4)),
-            'slope_max': clean_nan_values(round(slope_max, 2) if slope_max is not None else 0),
-            'slope_min': clean_nan_values(round(slope_min, 2) if slope_min is not None else 0),
-            'slope_std': clean_nan_values(round(slope_std, 2) if slope_std is not None else 0),
-            'slope_mean': clean_nan_values(round(slope_mean, 2) if slope_mean is not None else 0),
-            'aspect_mean': clean_nan_values(round(aspect_mean, 2) if aspect_mean is not None else 0),
-            'aspect_path': aspect_path,
+            'slope_max': clean_nan_values(round(slope_max, 2) if slope_max is not None else None),
+            'slope_min': clean_nan_values(round(slope_min, 2) if slope_min is not None else None),
+            'slope_std': clean_nan_values(round(slope_std, 2) if slope_std is not None else None),
+            'slope_mean': clean_nan_values(round(slope_mean, 2) if slope_mean is not None else None),
+            'aspect_mean': clean_nan_values(round(aspect_mean, 2) if aspect_mean is not None else None),
+            'aspect_path': aspect_path if aspect_exists else None,
             'pixel_count': pixel_count,
             'processed_at': datetime.now().isoformat(),
             'elevation_max': clean_nan_values(round(elevation_max, 2) if elevation_max is not None else None),
