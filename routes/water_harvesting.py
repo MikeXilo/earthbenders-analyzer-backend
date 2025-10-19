@@ -26,7 +26,7 @@ def calculate_water_harvesting():
             "coordinates": [[[lon, lat], ...]]
         },
         "polygon_id": "unique_polygon_identifier",
-        "average_slope_percent": 12.5,
+        "average_slope_percent": 12.5,  // Optional - will use existing statistics if available
         "user_id": "optional_user_identifier"
     }
     
@@ -70,9 +70,11 @@ def calculate_water_harvesting():
         if not polygon_id:
             return jsonify({'error': 'polygon_id is required'}), 400
         
+        # Make slope optional - water harvesting service will use existing statistics if available
         average_slope_percent = data.get('average_slope_percent')
         if average_slope_percent is None:
-            return jsonify({'error': 'average_slope_percent is required (in percent, e.g., 12.5 for 12.5%)'}), 400
+            # Set a default value, but water harvesting service will override with existing statistics if available
+            average_slope_percent = 10.0  # Default fallback
         
         # Optional fields
         user_id = data.get('user_id')
@@ -85,13 +87,16 @@ def calculate_water_harvesting():
         if not coordinates or not isinstance(coordinates, list) or len(coordinates) == 0:
             return jsonify({'error': 'Invalid polygon coordinates'}), 400
         
-        # Validate slope
-        try:
-            slope = float(average_slope_percent)
-            if slope < 0 or slope > 100:
-                return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400
-        except (ValueError, TypeError):
-            return jsonify({'error': 'average_slope_percent must be a number'}), 400
+        # Validate slope only if provided
+        if average_slope_percent is not None:
+            try:
+                slope = float(average_slope_percent)
+                if slope < 0 or slope > 100:
+                    return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400
+            except (ValueError, TypeError):
+                return jsonify({'error': 'average_slope_percent must be a number'}), 400
+        else:
+            slope = 10.0  # Default fallback
         
         logger.info(f"Calculating water harvesting for polygon {polygon_id} with {slope}% slope")
         
