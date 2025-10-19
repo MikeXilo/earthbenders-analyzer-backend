@@ -24,7 +24,10 @@ def calculate_water_harvesting():
         "polygon_geometry": {
             "type": "Polygon",
             "coordinates": [[[lon, lat], ...]]
-        }
+        },
+        "polygon_id": "unique_polygon_identifier",
+        "average_slope_percent": 12.5,
+        "user_id": "optional_user_identifier"
     }
     
     Returns:
@@ -32,12 +35,23 @@ def calculate_water_harvesting():
         "status": "success",
         "water_harvesting": {
             "area_hectares": 5.2,
-            "annual_rainfall_mm": 600,
-            "annual_harvest_liters": 21840000,
-            "annual_harvest_gallons": 5770000,
-            "comparisons": {...},
-            "recommendations": {...},
-            "cost_analysis": {...}
+            "climate": {
+                "annual_rainfall_mm": 774
+            },
+            "terrain": {
+                "average_slope_percent": 12.5,
+                "soil_type": "clay_loam",
+                "soil_details": {
+                    "wrb_class": "Luvisols",
+                    "data_source": "classification"
+                }
+            },
+            "runoff_coefficient": 0.58,
+            "harvest_potential": {
+                "annual_liters": 2942920,
+                ...
+            },
+            ...
         }
     }
     """
@@ -47,9 +61,21 @@ def calculate_water_harvesting():
         if not data:
             return jsonify({'error': 'No JSON data provided'}), 400
         
+        # Validate required fields
         polygon_geometry = data.get('polygon_geometry')
         if not polygon_geometry:
             return jsonify({'error': 'polygon_geometry is required'}), 400
+        
+        polygon_id = data.get('polygon_id')
+        if not polygon_id:
+            return jsonify({'error': 'polygon_id is required'}), 400
+        
+        average_slope_percent = data.get('average_slope_percent')
+        if average_slope_percent is None:
+            return jsonify({'error': 'average_slope_percent is required (in percent, e.g., 12.5 for 12.5%)'}), 400
+        
+        # Optional fields
+        user_id = data.get('user_id')
         
         # Validate polygon structure
         if not isinstance(polygon_geometry, dict) or polygon_geometry.get('type') != 'Polygon':
@@ -59,10 +85,23 @@ def calculate_water_harvesting():
         if not coordinates or not isinstance(coordinates, list) or len(coordinates) == 0:
             return jsonify({'error': 'Invalid polygon coordinates'}), 400
         
-        logger.info(f"Calculating water harvesting potential for polygon")
+        # Validate slope
+        try:
+            slope = float(average_slope_percent)
+            if slope < 0 or slope > 100:
+                return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400
+        except (ValueError, TypeError):
+            return jsonify({'error': 'average_slope_percent must be a number'}), 400
         
-        # Calculate water harvesting potential
-        water_analysis = water_service.calculate_water_harvesting_potential(polygon_geometry)
+        logger.info(f"Calculating water harvesting for polygon {polygon_id} with {slope}% slope")
+        
+        # Calculate water harvesting potential and save to database
+        water_analysis = water_service.calculate_water_harvesting_potential(
+            polygon_geometry=polygon_geometry,
+            polygon_id=polygon_id,
+            average_slope_percent=slope,
+            user_id=user_id
+        )
         
         return jsonify({
             'status': 'success',
@@ -70,7 +109,7 @@ def calculate_water_harvesting():
         }), 200
         
     except Exception as e:
-        logger.error(f"Error in water harvesting calculation: {str(e)}")
+        logger.error(f"Error in water harvesting calculation: {str(e)}", exc_info=True)
         return jsonify({
             'error': f'Water harvesting calculation failed: {str(e)}'
         }), 500
@@ -81,6 +120,13 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'water_harvesting',
-        'version': '1.0.0'
+        'version': '2.0.0',
+        'features': [
+            'Real rainfall data (Open-Meteo + NASA POWER)',
+            'Real soil data (SoilGrids properties + classification)',
+            'WRB soil type mapping',
+            'Slope-based runoff coefficient',
+            'ROI calculations',
+            'Storage recommendations'
+        ]
     }), 200
-

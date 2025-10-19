@@ -502,3 +502,70 @@ class DatabaseService:
                 conn.rollback()
                 conn.close()
             return {'status': 'error', 'message': str(e)}
+    
+    def save_water_harvesting(self, polygon_id: str, user_id: Optional[str], water_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Save water harvesting results to the analyses table
+        
+        Args:
+            polygon_id: Polygon identifier
+            user_id: User identifier (optional)
+            water_data: Complete water harvesting analysis dict
+        """
+        if not self.enabled:
+            logger.warning("Database not enabled, cannot save water harvesting data")
+            return {'status': 'error', 'message': 'Database not available'}
+        
+        conn = None
+        try:
+            conn = self._get_connection()
+            if not conn:
+                return {'status': 'error', 'message': 'Database connection failed'}
+            
+            cursor = conn.cursor()
+            
+            # Check if analysis exists for this polygon
+            cursor.execute("""
+                SELECT statistics FROM analyses 
+                WHERE polygon_id = %s
+            """, (polygon_id,))
+            
+            row = cursor.fetchone()
+            
+            if row:
+                # Update existing analysis
+                current_stats = row['statistics'] or {}
+                current_stats['water_harvesting'] = water_data
+                
+                cursor.execute("""
+                    UPDATE analyses 
+                    SET statistics = %s, updated_at = NOW()
+                    WHERE polygon_id = %s
+                """, (json.dumps(current_stats), polygon_id))
+                
+                conn.commit()
+                logger.info(f"Updated water harvesting data for polygon {polygon_id}")
+                return {'status': 'success', 'message': 'Water harvesting data updated'}
+            else:
+                # Create new analysis record
+                analysis_data = {
+                    'water_harvesting': water_data
+                }
+                
+                cursor.execute("""
+                    INSERT INTO analyses (polygon_id, user_id, statistics, created_at, updated_at)
+                    VALUES (%s, %s, %s, NOW(), NOW())
+                """, (polygon_id, user_id, json.dumps(analysis_data)))
+                
+                conn.commit()
+                logger.info(f"Created new analysis with water harvesting data for polygon {polygon_id}")
+                return {'status': 'success', 'message': 'Water harvesting data saved'}
+                
+        except Exception as e:
+            logger.error(f"Error saving water harvesting data: {e}")
+            if conn:
+                conn.rollback()
+            return {'status': 'error', 'message': str(e)}
+        finally:
+            if conn:
+                conn.close()
