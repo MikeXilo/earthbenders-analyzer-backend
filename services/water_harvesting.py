@@ -608,199 +608,186 @@ class WaterHarvestingService:
             'description': f"Enough water for {round(households, 1)} households for a year, or to irrigate {round(irrigated_ha, 1)} hectares of crops"
         }
     
-def _generate_recommendations(self, area_hectares, harvest_liters, runoff_coef):
-    """Generate storage and usage recommendations with both tanks and ponds"""
-    
-    # Recommend storing 25-40% of annual harvest depending on rainfall pattern
-    recommended_storage = harvest_liters * 0.30
-    recommended_storage_m3 = recommended_storage / 1000
-    
-    # ========================================
-    # OPTION 1: TANKS
-    # ========================================
-    tank_10k = recommended_storage / 10000
-    tank_20k = recommended_storage / 20000
-    
-    # Tank costs
-    tank_10k_cost = tank_10k * 3000  # $3000 per 10,000L tank
-    tank_20k_cost = tank_20k * 5000  # $5000 per 20,000L tank
-    
-    # Installation for tanks
-    tank_installation = 2000  # Base installation cost
-    tank_plumbing = recommended_storage_m3 * 5  # $5 per m3 for plumbing
-    
-    total_tank_cost_10k = tank_10k_cost + tank_installation + tank_plumbing
-    total_tank_cost_20k = tank_20k_cost + tank_installation + tank_plumbing
-    
-    # Use the cheaper tank option for comparison
-    best_tank_cost = min(total_tank_cost_10k, total_tank_cost_20k)
-    best_tank_option = "10000L" if total_tank_cost_10k < total_tank_cost_20k else "20000L"
-    
-    # ========================================
-    # OPTION 2: STORAGE PONDS (1m average depth)
-    # ========================================
-    pond_area_m2 = recommended_storage_m3 / 1.0  # 1m depth
-    pond_area_hectares = pond_area_m2 / 10000
-    pond_volume_m3 = recommended_storage_m3
-    
-    # Calculate pond dimensions (assuming square or circular)
-    pond_side_length = round(pow(pond_area_m2, 0.5), 1)  # Square pond
-    pond_diameter = round(2 * pow(pond_area_m2 / 3.14159, 0.5), 1)  # Circular pond
-    
-    # Pond construction costs
-    excavation_cost = pond_volume_m3 * 4  # $4/m3 excavation
-    liner_cost = pond_area_m2 * 12  # $12/m2 for EPDM liner (optional)
-    shaping_cost = pond_area_m2 * 2  # $2/m2 for shaping/compaction
-    fencing_cost = (pond_side_length * 4) * 15  # $15/m fencing (safety)
-    
-    # Total costs
-    pond_cost_with_liner = excavation_cost + liner_cost + shaping_cost + fencing_cost
-    pond_cost_without_liner = excavation_cost + shaping_cost + fencing_cost
-    
-    # ========================================
-    # COST COMPARISON
-    # ========================================
-    
-    # Savings: Pond vs Tanks
-    savings_with_liner = best_tank_cost - pond_cost_with_liner
-    savings_without_liner = best_tank_cost - pond_cost_without_liner
-    
-    savings_percent_with_liner = (savings_with_liner / best_tank_cost * 100) if best_tank_cost > 0 else 0
-    savings_percent_without_liner = (savings_without_liner / best_tank_cost * 100) if best_tank_cost > 0 else 0
-    
-    # Determine recommended option
-    if pond_cost_without_liner < best_tank_cost:
-        recommended_option = "pond_without_liner"
-        recommended_cost = pond_cost_without_liner
-    elif pond_cost_with_liner < best_tank_cost:
-        recommended_option = "pond_with_liner"
-        recommended_cost = pond_cost_with_liner
-    else:
-        recommended_option = "tanks"
-        recommended_cost = best_tank_cost
-    
-    recommendations = {
-        'storage': {
-            'recommended_liters': round(recommended_storage, 0),
-            'recommended_gallons': round(recommended_storage * 0.264172, 0),
-            'recommended_m3': round(recommended_storage_m3, 0),
-            
-            # TANK OPTIONS
-            'tank_options': {
-                '10000L_tanks': {
-                    'quantity': round(tank_10k, 1),
-                    'cost_per_tank': 3000,
-                    'total_tank_cost': round(tank_10k_cost, 0),
-                    'installation_cost': round(tank_installation + tank_plumbing, 0),
-                    'total_cost': round(total_tank_cost_10k, 0)
+    def _generate_recommendations(self, area_hectares, harvest_liters, runoff_coef):
+        """Generate storage and usage recommendations with both tanks and ponds"""
+        
+        # Recommend storing 25-40% of annual harvest depending on rainfall pattern
+        recommended_storage = harvest_liters * 0.30
+        recommended_storage_m3 = recommended_storage / 1000
+        
+        # ========================================
+        # OPTION 1: TANKS
+        # ========================================
+        tank_10k = recommended_storage / 10000
+        tank_20k = recommended_storage / 20000
+        
+        # Tank costs
+        tank_10k_cost = tank_10k * 3000  # $3000 per 10,000L tank
+        tank_20k_cost = tank_20k * 5000  # $5000 per 20,000L tank
+        
+        # Installation for tanks
+        tank_installation = 2000  # Base installation cost
+        tank_plumbing = recommended_storage_m3 * 5  # $5 per m3 for plumbing
+        
+        total_tank_cost_10k = tank_10k_cost + tank_installation + tank_plumbing
+        total_tank_cost_20k = tank_20k_cost + tank_installation + tank_plumbing
+        
+        # Use the cheaper tank option for comparison
+        best_tank_cost = min(total_tank_cost_10k, total_tank_cost_20k)
+        best_tank_option = "10000L" if total_tank_cost_10k < total_tank_cost_20k else "20000L"
+        
+        # ========================================
+        # OPTION 2: STORAGE PONDS (1m average depth)
+        # ========================================
+        pond_area_m2 = recommended_storage_m3 / 1.0  # 1m depth
+        pond_area_hectares = pond_area_m2 / 10000
+        pond_volume_m3 = recommended_storage_m3
+        
+        # Calculate pond dimensions (assuming square or circular)
+        pond_side_length = round(pow(pond_area_m2, 0.5), 1)  # Square pond
+        pond_diameter = round(2 * pow(pond_area_m2 / 3.14159, 0.5), 1)  # Circular pond
+        
+        # Pond construction costs
+        excavation_cost = pond_volume_m3 * 4  # $4/m3 excavation
+        liner_cost = pond_area_m2 * 12  # $12/m2 for EPDM liner (optional)
+        shaping_cost = pond_area_m2 * 2  # $2/m2 for shaping/compaction
+        fencing_cost = (pond_side_length * 4) * 15  # $15/m fencing (safety)
+        
+        # Total costs
+        pond_cost_with_liner = excavation_cost + liner_cost + shaping_cost + fencing_cost
+        pond_cost_without_liner = excavation_cost + shaping_cost + fencing_cost
+        
+        # ========================================
+        # COST COMPARISON
+        # ========================================
+        
+        # Savings: Pond vs Tanks
+        savings_with_liner = best_tank_cost - pond_cost_with_liner
+        savings_without_liner = best_tank_cost - pond_cost_without_liner
+        
+        savings_percent_with_liner = (savings_with_liner / best_tank_cost * 100) if best_tank_cost > 0 else 0
+        savings_percent_without_liner = (savings_without_liner / best_tank_cost * 100) if best_tank_cost > 0 else 0
+        
+        # Determine recommended option
+        if pond_cost_without_liner < best_tank_cost:
+            recommended_option = "pond_without_liner"
+            recommended_cost = pond_cost_without_liner
+        elif pond_cost_with_liner < best_tank_cost:
+            recommended_option = "pond_with_liner"
+            recommended_cost = pond_cost_with_liner
+        else:
+            recommended_option = "tanks"
+            recommended_cost = best_tank_cost
+        
+        recommendations = {
+            'storage': {
+                'recommended_liters': round(recommended_storage, 0),
+                'recommended_gallons': round(recommended_storage * 0.264172, 0),
+                'recommended_m3': round(recommended_storage_m3, 0),
+                
+                # TANK OPTIONS
+                'tank_options': {
+                    '10000L_tanks': {
+                        'quantity': round(tank_10k, 1),
+                        'cost_per_tank': 3000,
+                        'total_tank_cost': round(tank_10k_cost, 0),
+                        'installation_cost': round(tank_installation + tank_plumbing, 0),
+                        'total_cost': round(total_tank_cost_10k, 0)
+                    },
+                    '20000L_tanks': {
+                        'quantity': round(tank_20k, 1),
+                        'cost_per_tank': 5000,
+                        'total_tank_cost': round(tank_20k_cost, 0),
+                        'installation_cost': round(tank_installation + tank_plumbing, 0),
+                        'total_cost': round(total_tank_cost_20k, 0)
+                    },
+                    'best_option': best_tank_option,
+                    'best_cost': round(best_tank_cost, 0),
+                    'description': f"Install {round(tank_10k if best_tank_option == '10000L' else tank_20k, 1)} tanks of {best_tank_option}"
                 },
-                '20000L_tanks': {
-                    'quantity': round(tank_20k, 1),
-                    'cost_per_tank': 5000,
-                    'total_tank_cost': round(tank_20k_cost, 0),
-                    'installation_cost': round(tank_installation + tank_plumbing, 0),
-                    'total_cost': round(total_tank_cost_20k, 0)
+                
+                # POND OPTIONS
+                'pond_options': {
+                    'area_m2': round(pond_area_m2, 0),
+                    'area_hectares': round(pond_area_hectares, 4),
+                    'depth_meters': 1.0,
+                    'volume_m3': round(pond_volume_m3, 0),
+                    'square_dimensions': f"{pond_side_length}m x {pond_side_length}m",
+                    'circular_diameter': f"{pond_diameter}m diameter",
+                    'description': f"Build ponds with a total area of {round(pond_area_m2, 0)} m2 with 1m average depth",
+                    
+                    # Cost breakdown
+                    'costs': {
+                        'excavation': round(excavation_cost, 0),
+                        'liner_optional': round(liner_cost, 0),
+                        'shaping_compaction': round(shaping_cost, 0),
+                        'fencing': round(fencing_cost, 0),
+                        'total_with_liner': round(pond_cost_with_liner, 0),
+                        'total_without_liner': round(pond_cost_without_liner, 0)
+                    },
+                    
+                    'liner_note': 'Liner (EPDM/HDPE) needed for sandy/permeable soil. Clay soils may not need liner.'
                 },
-                'best_option': best_tank_option,
-                'best_cost': round(best_tank_cost, 0),
-                'description': f"Install {round(tank_10k if best_tank_option == '10000L' else tank_20k, 1)} tanks of {best_tank_option}"
+                
+                # COST COMPARISON
+                'cost_comparison': {
+                    'tanks_cost': round(best_tank_cost, 0),
+                    'pond_with_liner_cost': round(pond_cost_with_liner, 0),
+                    'pond_without_liner_cost': round(pond_cost_without_liner, 0),
+                    
+                    'savings_pond_with_liner': round(savings_with_liner, 0),
+                    'savings_pond_without_liner': round(savings_without_liner, 0),
+                    
+                    'savings_percent_with_liner': round(savings_percent_with_liner, 1),
+                    'savings_percent_without_liner': round(savings_percent_without_liner, 1),
+                    
+                    'recommended_option': recommended_option,
+                    'recommended_cost': round(recommended_cost, 0),
+                    
+                    'summary': self._get_cost_comparison_summary(best_tank_cost, 
+                        pond_cost_with_liner, 
+                        pond_cost_without_liner,
+                        savings_percent_with_liner,
+                        savings_percent_without_liner
+                    )
+                }
             },
-            
-            # POND OPTIONS
-            'pond_options': {
-                'area_m2': round(pond_area_m2, 0),
-                'area_hectares': round(pond_area_hectares, 4),
-                'depth_meters': 1.0,
-                'volume_m3': round(pond_volume_m3, 0),
-                'square_dimensions': f"{pond_side_length}m x {pond_side_length}m",
-                'circular_diameter': f"{pond_diameter}m diameter",
-                'description': f"Build ponds with a total area of {round(pond_area_m2, 0)} m2 with 1m average depth",
-                
-                # Cost breakdown
-                'costs': {
-                    'excavation': round(excavation_cost, 0),
-                    'liner_optional': round(liner_cost, 0),
-                    'shaping_compaction': round(shaping_cost, 0),
-                    'fencing': round(fencing_cost, 0),
-                    'total_with_liner': round(pond_cost_with_liner, 0),
-                    'total_without_liner': round(pond_cost_without_liner, 0)
-                },
-                
-                'liner_note': 'Liner (EPDM/HDPE) needed for sandy/permeable soil. Clay soils may not need liner.'
+            'usage': {
+                'irrigation_potential_hectares': round(harvest_liters / 5000000, 1),
+                'households_supported': round(harvest_liters / 150000, 1),
+                'livestock_capacity': round(harvest_liters / 36500, 0)  # 100L/day per large animal
             },
-            
-            # COST COMPARISON
-            'cost_comparison': {
-                'tanks_cost': round(best_tank_cost, 0),
-                'pond_with_liner_cost': round(pond_cost_with_liner, 0),
-                'pond_without_liner_cost': round(pond_cost_without_liner, 0),
-                
-                'savings_pond_with_liner': round(savings_with_liner, 0),
-                'savings_pond_without_liner': round(savings_without_liner, 0),
-                
-                'savings_percent_with_liner': round(savings_percent_with_liner, 1),
-                'savings_percent_without_liner': round(savings_percent_without_liner, 1),
-                
-                'recommended_option': recommended_option,
-                'recommended_cost': round(recommended_cost, 0),
-                
-                'summary': self._get_cost_comparison_summary(
-                    best_tank_cost, 
-                    pond_cost_with_liner, 
-                    pond_cost_without_liner,
-                    savings_percent_with_liner,
-                    savings_percent_without_liner
-                )
-            }
-        },
-        'usage': {
-            'irrigation_potential_hectares': round(harvest_liters / 5000000, 1),
-            'households_supported': round(harvest_liters / 150000, 1),
-            'livestock_capacity': round(harvest_liters / 36500, 0)  # 100L/day per large animal
-        },
-        'interventions': []
-    }
-    
-    # Suggest interventions based on runoff coefficient
-    if runoff_coef > 0.70:
-        recommendations['interventions'].append({
-            'type': 'Swales/Berms',
-            'reason': 'High runoff detected - install swales to slow water and increase infiltration',
-            'benefit': 'Could reduce runoff by 30-50%'
-        })
-    
-    if runoff_coef > 0.60:
-        recommendations['interventions'].append({
-            'type': 'Vegetation Cover',
-            'reason': 'Plant ground cover or trees to reduce runoff',
-            'benefit': 'Could reduce runoff coefficient by 0.10-0.20'
-        })
-    
-    return recommendations
+            'interventions': []
+        }
+        
+        # Suggest interventions based on runoff coefficient
+        if runoff_coef > 0.70:
+            recommendations['interventions'].append({
+                'type': 'Swales/Berms',
+                'reason': 'High runoff detected - install swales to slow water and increase infiltration',
+                'benefit': 'Could reduce runoff by 30-50%'
+            })
+        
+        if runoff_coef > 0.60:
+            recommendations['interventions'].append({
+                'type': 'Vegetation Cover',
+                'reason': 'Plant ground cover or trees to reduce runoff',
+                'benefit': 'Could reduce runoff coefficient by 0.10-0.20'
+            })
+        
+        return recommendations
 
-def _get_cost_comparison_summary(self, tank_cost, pond_with_liner, pond_without_liner, savings_pct_liner, savings_pct_no_liner):
-    """Generate a human-readable cost comparison summary"""
-    
-    if pond_without_liner < tank_cost and pond_without_liner < pond_with_liner:
-        return f"Pond without liner is cheapest: ${round(pond_without_liner, 0):,} (saves {abs(savings_pct_no_liner):.0f}% vs tanks). Suitable if you have clay soil with low permeability."
-    
-    elif pond_with_liner < tank_cost:
-        return f"Pond with liner is cheaper: ${round(pond_with_liner, 0):,} (saves {abs(savings_pct_liner):.0f}% vs tanks). Recommended for sandy/permeable soils."
-    
-    else:
-        return f"Tanks are more cost-effective: ${round(tank_cost, 0):,}. Ponds would cost ${round(pond_without_liner, 0):,} (without liner) or ${round(pond_with_liner, 0):,} (with liner). Tanks recommended for small properties or where space is limited."
-
-def _get_cost_comparison_summary(self, tank_cost, pond_with_liner, pond_without_liner, savings_pct_liner, savings_pct_no_liner):
-    """Generate a human-readable cost comparison summary"""
-    
-    if pond_without_liner < tank_cost and pond_without_liner < pond_with_liner:
-        return f"Pond without liner is cheapest: ${round(pond_without_liner, 0):,} (saves {abs(savings_pct_no_liner):.0f}% vs tanks). Suitable if you have clay soil with low permeability."
-    
-    elif pond_with_liner < tank_cost:
-        return f"Pond with liner is cheaper: ${round(pond_with_liner, 0):,} (saves {abs(savings_pct_liner):.0f}% vs tanks). Recommended for sandy/permeable soils."
-    
-    else:
-        return f"Tanks are more cost-effective: ${round(tank_cost, 0):,}. Ponds would cost ${round(pond_without_liner, 0):,} (without liner) or ${round(pond_with_liner, 0):,} (with liner). Tanks recommended for small properties or where space is limited."
+    def _get_cost_comparison_summary(self, tank_cost, pond_with_liner, pond_without_liner, savings_pct_liner, savings_pct_no_liner):
+        """Generate a human-readable cost comparison summary"""
+        
+        if pond_without_liner < tank_cost and pond_without_liner < pond_with_liner:
+            return f"Pond without liner is cheapest: ${round(pond_without_liner, 0):,} (saves {abs(savings_pct_no_liner):.0f}% vs tanks). Suitable if you have clay soil with low permeability."
+        
+        elif pond_with_liner < tank_cost:
+            return f"Pond with liner is cheaper: ${round(pond_with_liner, 0):,} (saves {abs(savings_pct_liner):.0f}% vs tanks). Recommended for sandy/permeable soils."
+        
+        else:
+            return f"Tanks are more cost-effective: ${round(tank_cost, 0):,}. Ponds would cost ${round(pond_without_liner, 0):,} (without liner) or ${round(pond_with_liner, 0):,} (with liner). Tanks recommended for small properties or where space is limited."
     
     def _calculate_costs(self, area_hectares, harvest_liters, slope_percent):
         """Calculate costs and ROI - REALISTIC for small properties"""
