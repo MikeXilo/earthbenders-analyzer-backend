@@ -270,7 +270,7 @@ def register_routes(app):
                 
                 # Build analysis files object
                 analysis_files = {
-                    'srtm': row['srtm_path'],
+                    'srtm': row['dem_path'],
                     'slope': row['slope_path'],
                     'aspect': row['aspect_path'],
                     'contours': row['contours_path'],
