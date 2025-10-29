@@ -165,10 +165,14 @@ def process_lidar_terrain():
     try:
         data = request.get_json()
         if not data or 'polygon' not in data:
-            return jsonify({
+            error_response = jsonify({
                 'status': 'error',
                 'message': 'Polygon geometry required'
-            }), 400
+            })
+            error_response.headers['Access-Control-Allow-Origin'] = '*'
+            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            return error_response, 400
         
         polygon_geometry = data['polygon']
         polygon_id = data.get('polygon_id', 'default_polygon')
@@ -198,10 +202,14 @@ def process_lidar_terrain():
         clipped_lidar_path = process_lidar_dem(polygon_geometry, polygon_id)
         
         if not clipped_lidar_path:
-            return jsonify({
+            error_response = jsonify({
                 'status': 'error',
                 'message': 'LIDAR preparation failed to produce a clipped DEM file'
-            }), 500
+            })
+            error_response.headers['Access-Control-Allow-Origin'] = '*'
+            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            return error_response, 500
             
         logger.info(f"PHASE 1: LIDAR DEM ready at {clipped_lidar_path}. Proceeding to unified analysis.")
         
@@ -218,10 +226,14 @@ def process_lidar_terrain():
         )
         
         if not results or not results.get('image'):
-            return jsonify({
+            error_response = jsonify({
                 'status': 'error',
                 'message': 'Unified analysis failed to produce a valid visualization overlay'
-            }), 500
+            })
+            error_response.headers['Access-Control-Allow-Origin'] = '*'
+            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            return error_response, 500
         
         # PHASE 3: Calculate statistics and save to database
         logger.info("PHASE 3: Calculating statistics and saving LIDAR analysis results to database")
@@ -259,13 +271,17 @@ def process_lidar_terrain():
         else:
             error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
             logger.error(f"❌ CRITICAL: FAILED to save LIDAR analysis results for {polygon_id}: {error_message}")
-            return jsonify({
+            error_response = jsonify({
                 'status': 'error',
                 'message': f'Failed to save analysis results: {error_message}'
-            }), 500
+            })
+            error_response.headers['Access-Control-Allow-Origin'] = '*'
+            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+            return error_response, 500
         
         # Results are already in proven SRTM format - return directly
-        return jsonify({
+        response = jsonify({
             'status': 'success',
             'message': 'LIDAR terrain analysis completed successfully via unified pipeline',
             'polygonId': polygon_id,
@@ -280,9 +296,20 @@ def process_lidar_terrain():
             }
         })
         
+        # Explicitly add CORS headers to ensure they're present
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        return response
+        
     except Exception as e:
         logger.error(f"Error processing LiDAR terrain: {e}")
-        return jsonify({
+        error_response = jsonify({
             'status': 'error',
             'message': f'Error: {str(e)}'
-        }), 500
+        })
+        # Explicitly add CORS headers to error response
+        error_response.headers['Access-Control-Allow-Origin'] = '*'
+        error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+        error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+        return error_response, 500
