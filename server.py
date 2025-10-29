@@ -49,11 +49,20 @@ app = Flask(__name__)
 cors_origin = os.environ.get('CORS_ORIGIN', '*')
 logger.info(f"Setting CORS origins to: {cors_origin}")
 
-# Simplified CORS configuration - always allow all origins for development
-logger.info("Configuring CORS to allow all origins for development")
+# Parse CORS_ORIGIN - if it contains comma-separated values, split them
+# If it contains '*' or is '*', allow all origins
+if cors_origin == '*' or '*' in cors_origin:
+    cors_origins = '*'
+    logger.info("CORS configured to allow all origins (*)")
+else:
+    # Split comma-separated origins and strip whitespace
+    cors_origins = [origin.strip() for origin in cors_origin.split(',') if origin.strip()]
+    logger.info(f"CORS configured with specific origins: {cors_origins}")
+
+# Configure CORS with parsed origins
 CORS(app, 
      supports_credentials=True, 
-     origins='*',
+     origins=cors_origins,
      allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
      expose_headers=["Content-Type", "Authorization", "Access-Control-Allow-Origin"],
      methods=["GET", "POST", "OPTIONS", "PUT", "DELETE", "PATCH"])
@@ -61,10 +70,20 @@ CORS(app,
 # Set CORS headers for all responses - this is critical for OPTIONS preflight requests
 @app.after_request
 def after_request(response):
-    # Always set Access-Control-Allow-Origin to * for development
-    response.headers['Access-Control-Allow-Origin'] = '*'
+    # Get the origin from the request
+    request_origin = request.headers.get('Origin')
+    
+    # If CORS is set to allow all origins (contains '*')
+    if cors_origins == '*':
+        response.headers['Access-Control-Allow-Origin'] = '*'
+    elif isinstance(cors_origins, list) and request_origin:
+        # Check if request origin is in the allowed list
+        if request_origin in cors_origins:
+            response.headers['Access-Control-Allow-Origin'] = request_origin
+    
     response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    response.headers['Access-Control-Allow-Credentials'] = 'true'
     return response
 
 # NASA Earthdata credentials

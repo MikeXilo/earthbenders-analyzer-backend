@@ -18,6 +18,16 @@ def register_routes(app):
     """Register LiDAR routes with Flask app"""
     app.register_blueprint(lidar_bp)
 
+@lidar_bp.route('/api/lidar/check', methods=['OPTIONS'])
+def check_lidar_availability_options():
+    """Handle CORS preflight requests for LiDAR check endpoint"""
+    response = jsonify({})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response
+
 @lidar_bp.route('/api/lidar/check', methods=['POST'])
 def check_lidar_availability():
     """
@@ -131,6 +141,16 @@ def check_lidar_availability():
             'message': f'Error: {str(e)}'
         }), 500
 
+@lidar_bp.route('/api/lidar/process', methods=['OPTIONS'])
+def process_lidar_terrain_options():
+    """Handle CORS preflight requests for LiDAR process endpoint"""
+    response = jsonify({})
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response
+
 @lidar_bp.route('/api/lidar/process', methods=['POST'])
 def process_lidar_terrain():
     """
@@ -154,8 +174,22 @@ def process_lidar_terrain():
         polygon_id = data.get('polygon_id', 'default_polygon')
         user_id = data.get('user_id', None)  # Extract user_id for database saving
         
+        # Normalize polygon format: LiDAR processor expects Feature with 'geometry' property
+        if polygon_geometry.get('type') == 'FeatureCollection' and polygon_geometry.get('features'):
+            # Extract first feature from FeatureCollection
+            polygon_geometry = polygon_geometry['features'][0]
+            logger.info("Extracted Feature from FeatureCollection for LiDAR processing")
+        elif polygon_geometry.get('type') in ['Polygon', 'MultiPolygon']:
+            # If it's just a geometry, wrap it in a Feature
+            polygon_geometry = {
+                'type': 'Feature',
+                'geometry': polygon_geometry,
+                'properties': {}
+            }
+            logger.info("Wrapped geometry in Feature for LiDAR processing")
+        
         logger.info(f"🚀 LIDAR ROUTE CALLED - Processing LiDAR terrain for polygon {polygon_id}")
-        logger.info(f"📊 LIDAR Request data: {data}")
+        logger.info(f"📊 LIDAR Request data: polygon type={polygon_geometry.get('type')}")
         
         # PHASE 1: LIDAR-specific preparation (CRS conversion and clipping)
         logger.info("PHASE 1: Starting LIDAR data preparation (merge, reproject, clip)")
