@@ -9,6 +9,7 @@ Handles USGS 3DEP DEM processing API endpoints:
 """
 
 from flask import Blueprint, request, jsonify
+from utils.cors import jsonify_with_cors
 import logging
 from typing import Dict, Any
 import os
@@ -43,11 +44,11 @@ def check_usgs_dem_availability():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
+            return jsonify_with_cors({'error': 'No JSON data provided'}), 400
         
         polygon_geometry = data.get('polygon_geometry')
         if not polygon_geometry:
-            return jsonify({'error': 'polygon_geometry is required'}), 400
+            return jsonify_with_cors({'error': 'polygon_geometry is required'}), 400
         
         # Import the processor to check bounds
         from services.usgs_dem_processor import usgs_dem_processor
@@ -56,13 +57,13 @@ def check_usgs_dem_availability():
         is_in_us = usgs_dem_processor._is_in_us_bounds(polygon_geometry)
         
         if is_in_us:
-            return jsonify({
+            return jsonify_with_cors({
                 'available': True,
                 'message': 'USGS 3DEP DEM available for this area',
                 'data_source': 'usgs-dem'
             })
         else:
-            return jsonify({
+            return jsonify_with_cors({
                 'available': False,
                 'message': 'Polygon is outside US bounds - USGS 3DEP DEM not available',
                 'data_source': 'srtm'  # Fallback to SRTM
@@ -70,7 +71,7 @@ def check_usgs_dem_availability():
             
     except Exception as e:
         logger.error(f"Error checking USGS DEM availability: {str(e)}")
-        return jsonify({'error': f'Error checking USGS DEM availability: {str(e)}'}), 500
+        return jsonify_with_cors({'error': f'Error checking USGS DEM availability: {str(e)}'}), 500
 
 @usgs_dem_bp.route('/process', methods=['POST'])
 def process_usgs_dem_analysis():
@@ -97,16 +98,16 @@ def process_usgs_dem_analysis():
     try:
         data = request.get_json()
         if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
+            return jsonify_with_cors({'error': 'No JSON data provided'}), 400
         
         polygon_geometry = data.get('polygon_geometry')
         polygon_id = data.get('polygon_id')
         user_id = data.get('user_id', None)  # Extract user_id for database saving
         
         if not polygon_geometry:
-            return jsonify({'error': 'polygon_geometry is required'}), 400
+            return jsonify_with_cors({'error': 'polygon_geometry is required'}), 400
         if not polygon_id:
-            return jsonify({'error': 'polygon_id is required'}), 400
+            return jsonify_with_cors({'error': 'polygon_id is required'}), 400
         
         logger.info(f"🚀 USGS DEM ROUTE CALLED - Processing USGS DEM for polygon {polygon_id}")
         logger.info(f"📊 USGS DEM Request data: {data}")
@@ -118,7 +119,7 @@ def process_usgs_dem_analysis():
         dem_path = process_usgs_dem(polygon_geometry, polygon_id)
         
         if not dem_path:
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': 'USGS DEM preparation failed to produce a clipped DEM file'
             }), 500
@@ -138,7 +139,7 @@ def process_usgs_dem_analysis():
         )
         
         if not results or not results.get('image'):
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': 'USGS DEM analysis failed to produce visualization'
             }), 500
@@ -176,7 +177,7 @@ def process_usgs_dem_analysis():
         
         if save_result and save_result.get('status') == 'success':
             logger.info(f"✅ USGS DEM analysis results saved successfully for {polygon_id}")
-            return jsonify({
+            return jsonify_with_cors({
                 'success': True,
                 'dem_path': dem_path,
                 'message': 'USGS DEM processing completed successfully',
@@ -188,7 +189,7 @@ def process_usgs_dem_analysis():
         else:
             error_message = save_result.get('message', 'Database save failed') if save_result else 'Database save returned None'
             logger.error(f"❌ CRITICAL: FAILED to save USGS DEM analysis results for {polygon_id}: {error_message}")
-            return jsonify({
+            return jsonify_with_cors({
                 'success': False,
                 'error': f'Database save failed: {error_message}'
             }), 500
@@ -196,7 +197,7 @@ def process_usgs_dem_analysis():
     except ValueError as e:
         # Handle specific errors like "Polygon outside US bounds"
         logger.warning(f"USGS DEM processing failed: {str(e)}")
-        return jsonify({
+        return jsonify_with_cors({
             'success': False,
             'error': str(e),
             'fallback': 'srtm'
@@ -204,7 +205,7 @@ def process_usgs_dem_analysis():
         
     except Exception as e:
         logger.error(f"Error processing USGS DEM: {str(e)}")
-        return jsonify({
+        return jsonify_with_cors({
             'success': False,
             'error': f'Error processing USGS DEM: {str(e)}'
         }), 500
@@ -228,7 +229,7 @@ def get_usgs_dem_status():
         # Check if cache directory exists
         cache_exists = os.path.exists(usgs_dem_processor.cache_directory)
         
-        return jsonify({
+        return jsonify_with_cors({
             'status': 'operational' if cache_exists else 'cache_directory_missing',
             'cache_directory': usgs_dem_processor.cache_directory,
             'cache_exists': cache_exists,
@@ -239,7 +240,7 @@ def get_usgs_dem_status():
         
     except Exception as e:
         logger.error(f"Error getting USGS DEM status: {str(e)}")
-        return jsonify({
+        return jsonify_with_cors({
             'status': 'error',
             'error': f'Error getting status: {str(e)}'
         }), 500

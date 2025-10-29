@@ -4,6 +4,7 @@
 from flask import Blueprint, request, jsonify
 import json
 from typing import Dict, Any
+from utils.cors import jsonify_with_cors
 
 # Create blueprint for availability checks
 availability_bp = Blueprint('availability', __name__, url_prefix='/api')
@@ -68,7 +69,7 @@ def check_lidar_availability():
         polygon_id = data.get('polygon_id')
         
         if not polygon:
-            return jsonify({'error': 'Polygon geometry is required'}), 400
+            return jsonify_with_cors({'error': 'Polygon geometry is required'}), 400
         
         # Detect geographic region
         region = detect_geographic_region(polygon)
@@ -76,7 +77,7 @@ def check_lidar_availability():
         # LiDAR is only available in Portugal
         available = region == 'portugal'
         
-        return jsonify({
+        return jsonify_with_cors({
             'available': available,
             'region': region,
             'message': f'LiDAR {"available" if available else "not available"} for {region} region'
@@ -84,7 +85,7 @@ def check_lidar_availability():
         
     except Exception as e:
         print(f"Error checking LiDAR availability: {e}")
-        return jsonify({'error': 'Failed to check LiDAR availability'}), 500
+        return jsonify_with_cors({'error': 'Failed to check LiDAR availability'}), 500
 
 @availability_bp.route('/usgs-dem/check-availability', methods=['POST'])
 def check_usgs_dem_availability():
@@ -97,7 +98,7 @@ def check_usgs_dem_availability():
         polygon_id = data.get('polygon_id')
         
         if not polygon:
-            return jsonify({'error': 'Polygon geometry is required'}), 400
+            return jsonify_with_cors({'error': 'Polygon geometry is required'}), 400
         
         # Detect geographic region
         region = detect_geographic_region(polygon)
@@ -105,7 +106,7 @@ def check_usgs_dem_availability():
         # USGS DEM is only available in US
         available = region == 'us'
         
-        return jsonify({
+        return jsonify_with_cors({
             'available': available,
             'region': region,
             'message': f'USGS DEM {"available" if available else "not available"} for {region} region'
@@ -113,7 +114,7 @@ def check_usgs_dem_availability():
         
     except Exception as e:
         print(f"Error checking USGS DEM availability: {e}")
-        return jsonify({'error': 'Failed to check USGS DEM availability'}), 500
+        return jsonify_with_cors({'error': 'Failed to check USGS DEM availability'}), 500
 
 @availability_bp.route('/srtm-high-res/check-availability', methods=['POST'])
 def check_srtm_high_res_availability():
@@ -126,7 +127,7 @@ def check_srtm_high_res_availability():
         polygon_id = data.get('polygon_id')
         
         if not polygon:
-            return jsonify({'error': 'Polygon geometry is required'}), 400
+            return jsonify_with_cors({'error': 'Polygon geometry is required'}), 400
         
         # Detect geographic region
         region = detect_geographic_region(polygon)
@@ -135,7 +136,7 @@ def check_srtm_high_res_availability():
         # You can add more sophisticated checks here later
         available = True
         
-        return jsonify({
+        return jsonify_with_cors({
             'available': available,
             'region': region,
             'message': f'SRTM High-Res available globally'
@@ -143,7 +144,7 @@ def check_srtm_high_res_availability():
         
     except Exception as e:
         print(f"Error checking SRTM High-Res availability: {e}")
-        return jsonify({'error': 'Failed to check SRTM High-Res availability'}), 500
+        return jsonify_with_cors({'error': 'Failed to check SRTM High-Res availability'}), 500
 
 # Register the blueprint in your main app
 # In your main app.py or __init__.py:

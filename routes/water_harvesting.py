@@ -5,6 +5,7 @@ Provides endpoints for water harvesting potential calculations
 from flask import Blueprint, request, jsonify
 import logging
 from services.water_harvesting import WaterHarvestingService
+from utils.cors import jsonify_with_cors
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +65,16 @@ def calculate_water_harvesting():
         data = request.get_json()
         
         if not data:
-            return jsonify({'error': 'No JSON data provided'}), 400
+            return jsonify_with_cors({'error': 'No JSON data provided'}), 400
         
         # Validate required fields
         polygon_geometry = data.get('polygon_geometry')
         if not polygon_geometry:
-            return jsonify({'error': 'polygon_geometry is required'}), 400
+            return jsonify_with_cors({'error': 'polygon_geometry is required'}), 400
         
         polygon_id = data.get('polygon_id')
         if not polygon_id:
-            return jsonify({'error': 'polygon_id is required'}), 400
+            return jsonify_with_cors({'error': 'polygon_id is required'}), 400
         
         # Smart slope detection: Use existing data or require manual input
         average_slope_percent = data.get('average_slope_percent')
@@ -112,7 +113,7 @@ def calculate_water_harvesting():
         
         # If still no slope data, return helpful error
         if average_slope_percent is None:
-            return jsonify({
+            return jsonify_with_cors({
                 'error': 'average_slope_percent is required',
                 'message': 'No slope data available. Please either:\n1. Run slope analysis first (recommended): POST /process_slopes\n2. Provide average_slope_percent manually in the request',
                 'help': {
@@ -131,19 +132,19 @@ def calculate_water_harvesting():
         
         # Validate polygon structure
         if not isinstance(polygon_geometry, dict) or polygon_geometry.get('type') != 'Polygon':
-            return jsonify({'error': 'Invalid polygon geometry format'}), 400
+            return jsonify_with_cors({'error': 'Invalid polygon geometry format'}), 400
         
         coordinates = polygon_geometry.get('coordinates')
         if not coordinates or not isinstance(coordinates, list) or len(coordinates) == 0:
-            return jsonify({'error': 'Invalid polygon coordinates'}), 400
+            return jsonify_with_cors({'error': 'Invalid polygon coordinates'}), 400
         
         # Validate slope
         try:
             slope = float(average_slope_percent)
             if slope < 0 or slope > 100:
-                return jsonify({'error': 'average_slope_percent must be between 0 and 100'}), 400
+                return jsonify_with_cors({'error': 'average_slope_percent must be between 0 and 100'}), 400
         except (ValueError, TypeError):
-            return jsonify({'error': 'average_slope_percent must be a number'}), 400
+            return jsonify_with_cors({'error': 'average_slope_percent must be a number'}), 400
         
         logger.info(f"🌊 Calculating water harvesting for polygon {polygon_id}")
         logger.info(f"   Slope: {slope}% (source: {slope_source})")
@@ -200,7 +201,7 @@ def calculate_water_harvesting():
         if slope_warnings:
             water_analysis['_warnings'] = slope_warnings
         
-        return jsonify({
+        return jsonify_with_cors({
             'status': 'success',
             'water_harvesting': water_analysis,
             'message': f'Water harvesting calculated successfully using {slope_source} slope data'
@@ -208,7 +209,7 @@ def calculate_water_harvesting():
         
     except Exception as e:
         logger.error(f"Error in water harvesting calculation: {str(e)}", exc_info=True)
-        return jsonify({
+        return jsonify_with_cors({
             'error': f'Water harvesting calculation failed: {str(e)}'
         }), 500
 
@@ -238,7 +239,7 @@ def get_water_harvesting(polygon_id):
         analysis_data = db.get_analysis_by_polygon_id(polygon_id)
         
         if not analysis_data:
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': f'No analysis found for polygon {polygon_id}'
             }), 404
@@ -248,19 +249,19 @@ def get_water_harvesting(polygon_id):
         water_harvesting = statistics.get('water_harvesting')
         
         if not water_harvesting:
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': f'No water harvesting data found for polygon {polygon_id}'
             }), 404
         
-        return jsonify({
+        return jsonify_with_cors({
             'status': 'success',
             'water_harvesting': water_harvesting
         }), 200
         
     except Exception as e:
         logger.error(f"Error retrieving water harvesting data: {str(e)}", exc_info=True)
-        return jsonify({
+        return jsonify_with_cors({
             'status': 'error',
             'message': f'Failed to retrieve water harvesting data: {str(e)}'
         }), 500
@@ -268,7 +269,7 @@ def get_water_harvesting(polygon_id):
 @water_harvesting_bp.route('/api/water-harvesting/health', methods=['GET'])
 def health_check():
     """Health check endpoint for water harvesting service"""
-    return jsonify({
+    return jsonify_with_cors({
         'status': 'healthy',
         'service': 'water_harvesting',
         'version': '2.0.0',

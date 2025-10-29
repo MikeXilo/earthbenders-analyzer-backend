@@ -6,6 +6,7 @@ import glob
 import logging
 import rasterio
 from flask import Blueprint, request, jsonify
+from utils.cors import jsonify_with_cors
 from shapely.geometry import box
 from shapely.geometry import shape as shapely_shape
 
@@ -21,12 +22,7 @@ def register_routes(app):
 @lidar_bp.route('/api/lidar/check', methods=['OPTIONS'])
 def check_lidar_availability_options():
     """Handle CORS preflight requests for LiDAR check endpoint"""
-    response = jsonify({})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    return response
+    return jsonify_with_cors({})
 
 @lidar_bp.route('/api/lidar/check', methods=['POST'])
 def check_lidar_availability():
@@ -53,7 +49,7 @@ def check_lidar_availability():
     try:
         data = request.get_json()
         if not data or 'bounds' not in data:
-            return jsonify({
+            return jsonify_with_cors({
                 'available': False,
                 'tiles': [],
                 'message': 'Invalid request: bounds required'
@@ -66,7 +62,7 @@ def check_lidar_availability():
         max_lat = bounds.get('maxLat')
         
         if None in [min_lon, min_lat, max_lon, max_lat]:
-            return jsonify({
+            return jsonify_with_cors({
                 'available': False,
                 'tiles': [],
                 'message': 'Invalid bounds: all coordinates required'
@@ -78,7 +74,7 @@ def check_lidar_availability():
         lidar_folder = "/app/data/LidarPt"
         if not os.path.exists(lidar_folder):
             logger.warning(f"LiDAR folder does not exist: {lidar_folder}")
-            return jsonify({
+            return jsonify_with_cors({
                 'available': False,
                 'tiles': [],
                 'message': 'LiDAR folder not found'
@@ -89,7 +85,7 @@ def check_lidar_availability():
         logger.info(f"Found {len(lidar_files)} LiDAR files in {lidar_folder}")
         
         if not lidar_files:
-            return jsonify({
+            return jsonify_with_cors({
                 'available': False,
                 'tiles': [],
                 'message': 'No LiDAR tiles found'
@@ -127,7 +123,7 @@ def check_lidar_availability():
         
         available = len(intersecting_tiles) > 0
         
-        return jsonify({
+        return jsonify_with_cors({
             'available': available,
             'tiles': intersecting_tiles,
             'message': f"Found {len(intersecting_tiles)} intersecting LiDAR tiles" if available else "No intersecting LiDAR tiles found"
@@ -135,7 +131,7 @@ def check_lidar_availability():
         
     except Exception as e:
         logger.error(f"Error checking LiDAR availability: {e}")
-        return jsonify({
+        return jsonify_with_cors({
             'available': False,
             'tiles': [],
             'message': f'Error: {str(e)}'
@@ -144,12 +140,7 @@ def check_lidar_availability():
 @lidar_bp.route('/api/lidar/process', methods=['OPTIONS'])
 def process_lidar_terrain_options():
     """Handle CORS preflight requests for LiDAR process endpoint"""
-    response = jsonify({})
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    return response
+    return jsonify_with_cors({})
 
 @lidar_bp.route('/api/lidar/process', methods=['POST'])
 def process_lidar_terrain():
@@ -165,13 +156,10 @@ def process_lidar_terrain():
     try:
         data = request.get_json()
         if not data or 'polygon' not in data:
-            error_response = jsonify({
+            error_response = jsonify_with_cors({
                 'status': 'error',
                 'message': 'Polygon geometry required'
             })
-            error_response.headers['Access-Control-Allow-Origin'] = '*'
-            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             return error_response, 400
         
         polygon_geometry = data['polygon']
@@ -202,13 +190,10 @@ def process_lidar_terrain():
         clipped_lidar_path = process_lidar_dem(polygon_geometry, polygon_id)
         
         if not clipped_lidar_path:
-            error_response = jsonify({
+            error_response = jsonify_with_cors({
                 'status': 'error',
                 'message': 'LIDAR preparation failed to produce a clipped DEM file'
             })
-            error_response.headers['Access-Control-Allow-Origin'] = '*'
-            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             return error_response, 500
             
         logger.info(f"PHASE 1: LIDAR DEM ready at {clipped_lidar_path}. Proceeding to unified analysis.")
@@ -226,13 +211,10 @@ def process_lidar_terrain():
         )
         
         if not results or not results.get('image'):
-            error_response = jsonify({
+            error_response = jsonify_with_cors({
                 'status': 'error',
                 'message': 'Unified analysis failed to produce a valid visualization overlay'
             })
-            error_response.headers['Access-Control-Allow-Origin'] = '*'
-            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             return error_response, 500
         
         # PHASE 3: Calculate statistics and save to database
@@ -271,17 +253,14 @@ def process_lidar_terrain():
         else:
             error_message = save_result.get('message', 'save_analysis_results failed') if save_result else 'save_analysis_results returned None'
             logger.error(f"❌ CRITICAL: FAILED to save LIDAR analysis results for {polygon_id}: {error_message}")
-            error_response = jsonify({
+            error_response = jsonify_with_cors({
                 'status': 'error',
                 'message': f'Failed to save analysis results: {error_message}'
             })
-            error_response.headers['Access-Control-Allow-Origin'] = '*'
-            error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-            error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
             return error_response, 500
         
         # Results are already in proven SRTM format - return directly
-        response = jsonify({
+        response = jsonify_with_cors({
             'status': 'success',
             'message': 'LIDAR terrain analysis completed successfully via unified pipeline',
             'polygonId': polygon_id,
@@ -296,20 +275,11 @@ def process_lidar_terrain():
             }
         })
         
-        # Explicitly add CORS headers to ensure they're present
-        response.headers['Access-Control-Allow-Origin'] = '*'
-        response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
         return response
         
     except Exception as e:
         logger.error(f"Error processing LiDAR terrain: {e}")
-        error_response = jsonify({
+        return jsonify_with_cors({
             'status': 'error',
             'message': f'Error: {str(e)}'
-        })
-        # Explicitly add CORS headers to error response
-        error_response.headers['Access-Control-Allow-Origin'] = '*'
-        error_response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-        error_response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With'
-        return error_response, 500
+        }), 500

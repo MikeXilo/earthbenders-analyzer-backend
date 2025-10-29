@@ -18,6 +18,7 @@ from services.terrain import calculate_centroid
 from services.database import DatabaseService  # New import
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import save_geojson
+from utils.cors import jsonify_with_cors
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def register_routes(app):
             logger.debug(f"Received data structure: {json.dumps(data, indent=2)}")
             
             if not data or 'data' not in data or 'filename' not in data:
-                return jsonify({'error': 'Missing required data'}), 400
+                return jsonify_with_cors({'error': 'Missing required data'}), 400
             
             geojson_data = data['data']
             filename = data['filename']
@@ -53,7 +54,7 @@ def register_routes(app):
             logger.info(f"Saving polygon with ID: {polygon_id}, User: {user_id}")
             
             if not filename.endswith('.geojson'):
-                return jsonify({'error': 'Invalid file extension'}), 400
+                return jsonify_with_cors({'error': 'Invalid file extension'}), 400
             
             # Save the GeoJSON file into a folder with the ID
             file_path = save_geojson(geojson_data, filename, SAVE_DIRECTORY, polygon_id)
@@ -104,10 +105,10 @@ def register_routes(app):
                 'file_metadata_status': file_result
             }
             
-            return jsonify(response)
+            return jsonify_with_cors(response)
         except Exception as e:
             logger.error(f"Error saving polygon: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
 
     @app.route('/status/<task_id>', methods=['GET'])
     def get_task_status(task_id):
@@ -119,7 +120,7 @@ def register_routes(app):
             status = get_task_status(task_id)
             
             if not status:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'not_found',
                     'task_id': task_id,
                     'message': 'Task not found or expired'
@@ -154,18 +155,18 @@ def register_routes(app):
                     'message': status.get('message', f'Task state: {status["status"]}')
                 }
             
-            return jsonify(response), 200
+            return jsonify_with_cors(response), 200
             
         except Exception as e:
             logger.error(f"Error checking task status: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
 
     @app.route('/process_polygon', methods=['POST'])
     def process_polygon():
         try:
             data = request.json
             if not data or 'data' not in data:
-                return jsonify({'error': 'Missing GeoJSON data'}), 400
+                return jsonify_with_cors({'error': 'Missing GeoJSON data'}), 400
 
             geojson_data = data['data']
             polygon_id = data.get('id', 'default_polygon')
@@ -185,10 +186,10 @@ def register_routes(app):
                 
                 geom = shape(geometry_data)
                 if not isinstance(geom, Polygon):
-                     return jsonify({'error': 'GeoJSON data is not a valid Polygon feature.'}), 400
+                     return jsonify_with_cors({'error': 'GeoJSON data is not a valid Polygon feature.'}), 400
             except Exception as e:
                 logger.error(f"Failed to parse GeoJSON into Shapely geometry: {str(e)}", exc_info=True)
-                return jsonify({'error': f'Invalid GeoJSON structure: {str(e)}'}), 400
+                return jsonify_with_cors({'error': f'Invalid GeoJSON structure: {str(e)}'}), 400
 
             # 2. Get the bounding box (bbox) from the Shapely object (minx, miny, maxx, maxy)
             min_lon, min_lat, max_lon, max_lat = geom.bounds
@@ -203,7 +204,7 @@ def register_routes(app):
                 task_id = run_terrain_analysis(polygon_id, geojson_data, data_source)
                 
                 # Return task ID for status checking
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'processing',
                     'task_id': task_id,
                     'polygon_id': polygon_id,
@@ -218,7 +219,7 @@ def register_routes(app):
                     srtm_files = get_srtm_data(geojson_data)
                     if not srtm_files:
                         db_service.update_polygon_status(polygon_id, 'failed')
-                        return jsonify({'error': 'No SRTM data available for this location'}), 500
+                        return jsonify_with_cors({'error': 'No SRTM data available for this location'}), 500
                     
                     # Process SRTM files
                     polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
@@ -242,13 +243,13 @@ def register_routes(app):
                         logger.info(f"Parallel terrain processing completed for polygon {polygon_id}")
                 elif data_source == 'lidar':
                     # TODO: Implement synchronous LiDAR processing
-                    return jsonify({'error': 'LiDAR processing not yet implemented'}), 501
+                    return jsonify_with_cors({'error': 'LiDAR processing not yet implemented'}), 501
                 else:
-                    return jsonify({'error': f'Unknown data source: {data_source}'}), 400
+                    return jsonify_with_cors({'error': f'Unknown data source: {data_source}'}), 400
             
             if 'error' in processed_data:
                 db_service.update_polygon_status(polygon_id, 'failed')
-                return jsonify(processed_data), 500
+                return jsonify_with_cors(processed_data), 500
             
             # 5. Get the final clipped SRTM file path
             clipped_dem_path = processed_data['clipped_dem_path']
@@ -328,7 +329,7 @@ def register_routes(app):
                  logger.debug(f"Removed temp clipped file: {clipped_dem_path}")
 
             # Return the processed SRTM data in the format expected by the frontend
-            return jsonify({
+            return jsonify_with_cors({
                 'message': 'Polygon processed successfully. SRTM data clipped and saved.',
                 'polygon_id': polygon_id,
                 'srtm_file_path': srtm_file_path,
@@ -350,7 +351,7 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error processing polygon: {str(e)}", exc_info=True)
             db_service.update_polygon_status(polygon_id, 'failed')
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
             
     @app.route('/centroid', methods=['POST'])
     def calculate_centroid_route():
@@ -358,7 +359,7 @@ def register_routes(app):
             points = request.json.get('points')
             
             if not points or len(points) < 3:
-                return jsonify({'error': 'Not enough points. Need at least 3 for a polygon.'}), 400
+                return jsonify_with_cors({'error': 'Not enough points. Need at least 3 for a polygon.'}), 400
             
             # The calculation function remains the same assuming it takes Shapely coordinates
             # Note: The 'calculate_centroid' service function is assumed to correctly handle the 'points' input structure
@@ -367,9 +368,9 @@ def register_routes(app):
             # Keeping the old logic for now, but flagging that standard GeoJSON features are usually passed.
             centroid = calculate_centroid(points)
             if not centroid:
-                return jsonify({'error': 'Failed to calculate centroid'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate centroid'}), 500
                 
-            return jsonify({'centroid': centroid})
+            return jsonify_with_cors({'centroid': centroid})
         except Exception as e:
             logger.exception("Error in calculate_centroid")
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500

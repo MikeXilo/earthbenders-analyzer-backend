@@ -11,6 +11,7 @@ from datetime import datetime
 from services.terrain import calculate_slopes, visualize_slope, generate_contours, calculate_geomorphons, visualize_geomorphons, calculate_hypsometrically_tinted_hillshade, visualize_hillshade, calculate_aspect, visualize_aspect, calculate_drainage_network, visualize_drainage_network
 from utils.config import SAVE_DIRECTORY
 from utils.file_io import get_most_recent_polygon
+from utils.cors import jsonify_with_cors
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,7 @@ def register_routes(app):
             
             if 'id' not in data:
                 logger.error("❌ Missing polygon ID parameter")
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"🔍 Processing slopes for polygon ID: {polygon_id}")
@@ -44,7 +45,7 @@ def register_routes(app):
             
             if not os.path.exists(polygon_session_folder):
                 logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
@@ -54,7 +55,7 @@ def register_routes(app):
             input_file = find_dem_file(polygon_session_folder, polygon_id)
             if not input_file:
                 logger.error("❌ No DEM data found in polygon session folder")
-                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
+                return jsonify_with_cors({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
             logger.info(f"✅ Using DEM file: {input_file}")
             
@@ -64,7 +65,7 @@ def register_routes(app):
             # Calculate slope
             success = calculate_slopes(input_file, slope_file)
             if not success:
-                return jsonify({'error': 'Failed to calculate slope'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate slope'}), 500
             
             # Load the polygon data
             polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
@@ -81,7 +82,7 @@ def register_routes(app):
             # Visualize the slope data
             slope_viz = visualize_slope(slope_file, polygon_data)
             if not slope_viz:
-                return jsonify({'error': 'Failed to visualize slope data'}), 500
+                return jsonify_with_cors({'error': 'Failed to visualize slope data'}), 500
             
             # Add the file paths to the response
             slope_viz['slope_file'] = slope_file
@@ -123,10 +124,10 @@ def register_routes(app):
             except Exception as e:
                 logger.warning(f"Could not recalculate statistics: {str(e)}")
                 
-            return jsonify(slope_viz)
+            return jsonify_with_cors(slope_viz)
         except Exception as e:
             logger.error(f"Error processing slopes: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
     
     @app.route('/generate_contours', methods=['POST'])
     def generate_contours_route():
@@ -137,7 +138,7 @@ def register_routes(app):
             
             # Check for required polygon ID
             if 'id' not in data:
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"Generating contours for polygon ID: {polygon_id}")
@@ -153,7 +154,7 @@ def register_routes(app):
             # Construct the path to the polygon session folder
             polygon_session_folder = os.path.join(SAVE_DIRECTORY, "polygon_sessions", polygon_id)
             if not os.path.exists(polygon_session_folder):
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             # Look for the SRTM data in the polygon session folder
             input_file = None
@@ -172,7 +173,7 @@ def register_routes(app):
             if not input_file:
                 # SRTM cache directory should only contain raw tiles, not clipped files
                 # If no SRTM file found, return error
-                return jsonify({'error': 'SRTM data not found. Please process terrain data first.'}), 400
+                return jsonify_with_cors({'error': 'SRTM data not found. Please process terrain data first.'}), 400
             
             # Output file in the polygon session folder
             contour_file = os.path.join(polygon_session_folder, f"{polygon_id}_contours.geojson")
@@ -181,7 +182,7 @@ def register_routes(app):
             # Generate contours
             contours_geojson = generate_contours(input_file, contour_file, interval)
             if not contours_geojson:
-                return jsonify({'error': 'Failed to generate contours'}), 500
+                return jsonify_with_cors({'error': 'Failed to generate contours'}), 500
             
             logger.info("============= CONTOUR GENERATION COMPLETED SUCCESSFULLY =============")
             
@@ -212,7 +213,7 @@ def register_routes(app):
             if contours_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save contours file metadata: {contours_file_result.get('message', 'Unknown error')}")
             
-            return jsonify({
+            return jsonify_with_cors({
                 'contours': contours_geojson,
                 'interval': interval,
                 'contour_file': contour_file
@@ -221,7 +222,7 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error in generate_contours: {str(e)}", exc_info=True)
             logger.error("============= CONTOUR GENERATION FAILED =============")
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
     
     @app.route('/process_geomorphons', methods=['POST'])
     def process_geomorphons():
@@ -232,7 +233,7 @@ def register_routes(app):
             
             if 'id' not in data:
                 logger.error("❌ Missing polygon ID parameter")
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"🔍 Processing geomorphons for polygon ID: {polygon_id}")
@@ -250,7 +251,7 @@ def register_routes(app):
             
             if not os.path.exists(polygon_session_folder):
                 logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
@@ -258,7 +259,7 @@ def register_routes(app):
             input_file = find_dem_file(polygon_session_folder, polygon_id)
             if not input_file:
                 logger.error("❌ No DEM data found in polygon session folder")
-                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
+                return jsonify_with_cors({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
             logger.info(f"✅ Using DEM file: {input_file}")
             
@@ -268,7 +269,7 @@ def register_routes(app):
             # Calculate geomorphons
             success = calculate_geomorphons(input_file, geomorphons_file, search, threshold, forms)
             if not success:
-                return jsonify({'error': 'Failed to calculate geomorphons'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate geomorphons'}), 500
             
             # Load the polygon data
             polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
@@ -285,7 +286,7 @@ def register_routes(app):
             # Visualize the geomorphons data
             geomorphons_viz = visualize_geomorphons(geomorphons_file, polygon_data)
             if not geomorphons_viz:
-                return jsonify({'error': 'Failed to visualize geomorphons data'}), 500
+                return jsonify_with_cors({'error': 'Failed to visualize geomorphons data'}), 500
             
             # Add the file paths to the response
             geomorphons_viz['geomorphons_file'] = geomorphons_file
@@ -317,10 +318,10 @@ def register_routes(app):
             if geomorphons_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save geomorphons file metadata: {geomorphons_file_result.get('message', 'Unknown error')}")
                 
-            return jsonify(geomorphons_viz)
+            return jsonify_with_cors(geomorphons_viz)
         except Exception as e:
             logger.error(f"Error processing geomorphons: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
     
     @app.route('/process_hillshade', methods=['POST'])
     def process_hillshade():
@@ -331,7 +332,7 @@ def register_routes(app):
             
             if 'id' not in data:
                 logger.error("❌ Missing polygon ID parameter")
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"🔍 Processing hillshade for polygon ID: {polygon_id}")
@@ -352,7 +353,7 @@ def register_routes(app):
             
             if not os.path.exists(polygon_session_folder):
                 logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
@@ -360,7 +361,7 @@ def register_routes(app):
             input_file = find_dem_file(polygon_session_folder, polygon_id)
             if not input_file:
                 logger.error("❌ No DEM data found in polygon session folder")
-                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
+                return jsonify_with_cors({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
             logger.info(f"✅ Using DEM file: {input_file}")
             
@@ -379,7 +380,7 @@ def register_routes(app):
                 zfactor=zfactor
             )
             if not success:
-                return jsonify({'error': 'Failed to calculate hillshade'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate hillshade'}), 500
             
             # Load the polygon data
             polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
@@ -396,7 +397,7 @@ def register_routes(app):
             # Visualize the hillshade data
             hillshade_viz = visualize_hillshade(hillshade_file, polygon_data)
             if not hillshade_viz:
-                return jsonify({'error': 'Failed to visualize hillshade data'}), 500
+                return jsonify_with_cors({'error': 'Failed to visualize hillshade data'}), 500
             
             # Add the file paths to the response
             hillshade_viz['hillshade_file'] = hillshade_file
@@ -428,10 +429,10 @@ def register_routes(app):
             if hillshade_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save hillshade file metadata: {hillshade_file_result.get('message', 'Unknown error')}")
                 
-            return jsonify(hillshade_viz)
+            return jsonify_with_cors(hillshade_viz)
         except Exception as e:
             logger.error(f"Error processing hillshade: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
     
     @app.route('/process_aspect', methods=['POST'])
     def process_aspect():
@@ -442,7 +443,7 @@ def register_routes(app):
             
             if 'id' not in data:
                 logger.error("❌ Missing polygon ID parameter")
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"🔍 Processing aspect for polygon ID: {polygon_id}")
@@ -460,7 +461,7 @@ def register_routes(app):
             
             if not os.path.exists(polygon_session_folder):
                 logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
@@ -468,7 +469,7 @@ def register_routes(app):
             input_file = find_dem_file(polygon_session_folder, polygon_id)
             if not input_file:
                 logger.error("❌ No DEM data found in polygon session folder")
-                return jsonify({'error': 'DEM data not found. Please process terrain data first.'}), 400
+                return jsonify_with_cors({'error': 'DEM data not found. Please process terrain data first.'}), 400
             
             logger.info(f"✅ Using DEM file: {input_file}")
             
@@ -484,7 +485,7 @@ def register_routes(app):
                 zero_for_flat=zero_for_flat
             )
             if not success:
-                return jsonify({'error': 'Failed to calculate aspect'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate aspect'}), 500
             
             # Load the polygon data
             polygon_file = os.path.join(polygon_session_folder, f"{polygon_id}.geojson")
@@ -501,7 +502,7 @@ def register_routes(app):
             # Visualize the aspect data
             aspect_viz = visualize_aspect(aspect_file, polygon_data)
             if not aspect_viz:
-                return jsonify({'error': 'Failed to visualize aspect data'}), 500
+                return jsonify_with_cors({'error': 'Failed to visualize aspect data'}), 500
             
             # Add the file paths to the response
             aspect_viz['aspect_file'] = aspect_file
@@ -543,10 +544,10 @@ def register_routes(app):
             except Exception as e:
                 logger.warning(f"Could not recalculate statistics: {str(e)}")
                 
-            return jsonify(aspect_viz)
+            return jsonify_with_cors(aspect_viz)
         except Exception as e:
             logger.error(f"Error processing aspect: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500
+            return jsonify_with_cors({'error': str(e)}), 500
 
     @app.route('/process_drainage_network', methods=['POST'])
     def process_drainage_network():
@@ -557,7 +558,7 @@ def register_routes(app):
             
             if 'id' not in data:
                 logger.error("❌ Missing polygon ID parameter")
-                return jsonify({'error': 'Missing polygon ID parameter'}), 400
+                return jsonify_with_cors({'error': 'Missing polygon ID parameter'}), 400
                 
             polygon_id = data['id']
             logger.info(f"🔍 Processing drainage network for polygon ID: {polygon_id}")
@@ -568,14 +569,14 @@ def register_routes(app):
             
             if not os.path.exists(polygon_session_folder):
                 logger.error(f"❌ Polygon session folder not found: {polygon_session_folder}")
-                return jsonify({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
+                return jsonify_with_cors({'error': f'Polygon session folder not found for ID: {polygon_id}'}), 404
             
             logger.info(f"✅ Polygon session folder exists: {polygon_session_folder}")
             
             # Check if DEM file exists (try both SRTM and LIDAR patterns)
             srtm_file = find_dem_file(polygon_session_folder, polygon_id)
             if not srtm_file:
-                return jsonify({'error': 'DEM file not found. Please process elevation data first.'}), 404
+                return jsonify_with_cors({'error': 'DEM file not found. Please process elevation data first.'}), 404
             
             logger.info(f"✅ DEM file found: {srtm_file}")
             
@@ -589,7 +590,7 @@ def register_routes(app):
             
             if not success:
                 logger.error("❌ Failed to calculate drainage network")
-                return jsonify({'error': 'Failed to calculate drainage network'}), 500
+                return jsonify_with_cors({'error': 'Failed to calculate drainage network'}), 500
             
             logger.info("✅ Drainage network calculation completed successfully")
             
@@ -612,7 +613,7 @@ def register_routes(app):
             
             if not drainage_viz:
                 logger.error("❌ Failed to visualize drainage network data")
-                return jsonify({'error': 'Failed to visualize drainage network data'}), 500
+                return jsonify_with_cors({'error': 'Failed to visualize drainage network data'}), 500
             
             logger.info("✅ Drainage network visualization completed successfully")
             
@@ -646,7 +647,7 @@ def register_routes(app):
             if drainage_file_result.get('status') != 'success':
                 logger.warning(f"Failed to save drainage file metadata: {drainage_file_result.get('message', 'Unknown error')}")
                 
-            return jsonify(drainage_viz)
+            return jsonify_with_cors(drainage_viz)
         except Exception as e:
             logger.error(f"Error processing drainage network: {str(e)}", exc_info=True)
-            return jsonify({'error': str(e)}), 500 
+            return jsonify_with_cors({'error': str(e)}), 500

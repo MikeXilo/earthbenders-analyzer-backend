@@ -6,6 +6,7 @@ import json
 import os
 from flask import request, jsonify
 from services.database import DatabaseService
+from utils.cors import jsonify_with_cors
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,7 @@ def register_routes(app):
             user_id = request.args.get('user_id')
             
             if not user_id:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'user_id parameter is required'
                 }), 400
@@ -37,7 +38,7 @@ def register_routes(app):
             # Query analyses table for user's projects
             conn = db_service._get_connection()
             if not conn:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'Database connection failed'
                 }), 500
@@ -149,7 +150,7 @@ def register_routes(app):
                 cursor.close()
                 conn.close()
                 
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'success',
                     'projects': projects,
                     'count': len(projects)
@@ -160,14 +161,14 @@ def register_routes(app):
                 if conn:
                     conn.rollback()
                     conn.close()
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': f'Database query failed: {str(e)}'
                 }), 500
                 
         except Exception as e:
             logger.error(f"Error in get_user_projects: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': str(e)
             }), 500
@@ -182,20 +183,20 @@ def register_routes(app):
             result = db_service.recalculate_statistics(polygon_id)
             
             if result.get('status') == 'success':
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'success',
                     'statistics': result.get('statistics', {}),
                     'message': 'Statistics calculated successfully'
                 })
             else:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': result.get('message', 'Statistics calculation failed')
                 }), 400
                 
         except Exception as e:
             logger.error(f"Error calculating statistics for project {polygon_id}: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': str(e)
             }), 500
@@ -209,7 +210,7 @@ def register_routes(app):
             
             conn = db_service._get_connection()
             if not conn:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'Database connection failed'
                 }), 500
@@ -247,7 +248,7 @@ def register_routes(app):
                 if not row:
                     cursor.close()
                     conn.close()
-                    return jsonify({
+                    return jsonify_with_cors({
                         'status': 'error',
                         'message': 'Project not found'
                     }), 404
@@ -325,7 +326,7 @@ def register_routes(app):
                 cursor.close()
                 conn.close()
                 
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'success',
                     'project': project
                 })
@@ -336,14 +337,14 @@ def register_routes(app):
                     conn.rollback()
                     cursor.close()
                     conn.close()
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': f'Database query failed: {str(e)}'
                 }), 500
                 
         except Exception as e:
             logger.error(f"Error in get_project_details: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': str(e)
             }), 500
@@ -356,7 +357,7 @@ def register_routes(app):
             new_name = data.get('name')
             
             if not new_name:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'name is required'
                 }), 400
@@ -365,7 +366,7 @@ def register_routes(app):
             
             conn = db_service._get_connection()
             if not conn:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'Database connection failed'
                 }), 500
@@ -384,7 +385,7 @@ def register_routes(app):
                 if not user_result:
                     cursor.close()
                     conn.close()
-                    return jsonify({
+                    return jsonify_with_cors({
                         'status': 'error',
                         'message': 'Project not found'
                     }), 404
@@ -405,7 +406,7 @@ def register_routes(app):
                 if duplicate_count > 0:
                     cursor.close()
                     conn.close()
-                    return jsonify({
+                    return jsonify_with_cors({
                         'status': 'error',
                         'message': 'A project with this name already exists for this user'
                     }), 409
@@ -420,7 +421,7 @@ def register_routes(app):
                 if cursor.rowcount == 0:
                     cursor.close()
                     conn.close()
-                    return jsonify({
+                    return jsonify_with_cors({
                         'status': 'error',
                         'message': 'Project not found'
                     }), 404
@@ -429,7 +430,7 @@ def register_routes(app):
                 cursor.close()
                 conn.close()
                 
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'success',
                     'message': 'Project name updated successfully'
                 })
@@ -439,14 +440,14 @@ def register_routes(app):
                 if conn:
                     conn.rollback()
                     conn.close()
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': f'Database update failed: {str(e)}'
                 }), 500
                 
         except Exception as e:
             logger.error(f"Error in update_project_name: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': str(e)
             }), 500

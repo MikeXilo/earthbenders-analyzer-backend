@@ -4,6 +4,7 @@ Routes for serving raster files
 import os
 import logging
 from flask import request, jsonify, send_file, abort
+from utils.cors import jsonify_with_cors
 from werkzeug.utils import secure_filename
 from services.raster_visualization import process_raster_file, detect_layer_type_from_path
 
@@ -58,7 +59,7 @@ def register_routes(app):
             
         except Exception as e:
             logger.error(f"Error serving raster file {file_path}: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': f'Failed to serve raster file: {str(e)}'
             }), 500
@@ -71,7 +72,7 @@ def register_routes(app):
             polygon_data = request.args.get('polygon')
             
             if not file_path:
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'path parameter is required'
                 }), 400
@@ -79,7 +80,7 @@ def register_routes(app):
             # Security: Ensure the path is within the allowed directory
             if '..' in file_path or file_path.startswith('/'):
                 logger.warning(f"Invalid file path requested: {file_path}")
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'Invalid file path'
                 }), 400
@@ -90,7 +91,7 @@ def register_routes(app):
             # Security: Ensure the file is within the allowed directory
             if not os.path.abspath(full_path).startswith('/app/data'):
                 logger.warning(f"Path traversal attempt: {file_path}")
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'Access denied'
                 }), 403
@@ -98,7 +99,7 @@ def register_routes(app):
             # Check if file exists
             if not os.path.exists(full_path):
                 logger.warning(f"File not found: {full_path}")
-                return jsonify({
+                return jsonify_with_cors({
                     'status': 'error',
                     'message': 'File not found'
                 }), 404
@@ -134,18 +135,18 @@ def register_routes(app):
                                 logger.info(f"Contours are GeoJSON files, serving raw file: {full_path}")
                                 return send_file(full_path, mimetype='application/geo+json')
                             else:
-                                return jsonify({
+                                return jsonify_with_cors({
                                     'status': 'error',
                                     'message': f'Failed to process {layer_type} visualization'
                                 }), 500
                         
                         # Return the Base64 data as a JSON object
                         # The frontend will now treat this like the working processSRTM result
-                        return jsonify({'image': base64_image_data}), 200
+                        return jsonify_with_cors({'image': base64_image_data}), 200
                         
                     except Exception as e:
                         logger.error(f"Error processing {layer_type} visualization: {str(e)}")
-                        return jsonify({
+                        return jsonify_with_cors({
                             'status': 'error',
                             'message': f'Failed to process {layer_type} visualization: {str(e)}'
                         }), 500
@@ -171,7 +172,7 @@ def register_routes(app):
             
         except Exception as e:
             logger.error(f"Error serving raster file via API: {str(e)}")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'error',
                 'message': f'Failed to serve raster file: {str(e)}'
             }), 500
@@ -182,14 +183,14 @@ def register_routes(app):
         try:
             data = request.get_json()
             if not data:
-                return jsonify({'error': 'No JSON data provided'}), 400
+                return jsonify_with_cors({'error': 'No JSON data provided'}), 400
             
             file_path = data.get('file_path')
             layer_type = data.get('layer_type')
             polygon_id = data.get('polygon_id')
             
             if not file_path or not layer_type:
-                return jsonify({'error': 'Missing required parameters: file_path and layer_type'}), 400
+                return jsonify_with_cors({'error': 'Missing required parameters: file_path and layer_type'}), 400
             
             logger.info(f"Visualizing raster: {file_path} (type: {layer_type})")
             
@@ -202,7 +203,7 @@ def register_routes(app):
             # Check if file exists
             if not os.path.exists(full_path):
                 logger.warning(f"File not found: {full_path}")
-                return jsonify({'error': f'File not found: {full_path}'}), 404
+                return jsonify_with_cors({'error': f'File not found: {full_path}'}), 404
             
             # Get polygon data if polygon_id is provided
             polygon_data = None
@@ -239,10 +240,10 @@ def register_routes(app):
             base64_image_data = process_raster_file(full_path, layer_type, polygon_data)
             
             if base64_image_data is None:
-                return jsonify({'error': f'Failed to process {layer_type} visualization'}), 500
+                return jsonify_with_cors({'error': f'Failed to process {layer_type} visualization'}), 500
             
             logger.info(f"Successfully generated {layer_type} visualization")
-            return jsonify({
+            return jsonify_with_cors({
                 'status': 'success',
                 'image': base64_image_data,
                 'layer_type': layer_type,
@@ -251,4 +252,4 @@ def register_routes(app):
             
         except Exception as e:
             logger.error(f"Error in visualize_raster: {str(e)}")
-            return jsonify({'error': f'Internal server error: {str(e)}'}), 500
+            return jsonify_with_cors({'error': f'Internal server error: {str(e)}'}), 500

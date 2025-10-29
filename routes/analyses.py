@@ -4,6 +4,7 @@ Routes for analysis management and retrieval
 import logging
 from flask import request, jsonify
 from services.database import DatabaseService
+from utils.cors import jsonify_with_cors
 
 logger = logging.getLogger(__name__)
 
@@ -30,21 +31,21 @@ def register_routes(app):
             identifier = data.get('polygon_id') or data.get('analysis_id')
 
             if not identifier:
-                return jsonify({'error': 'Missing required polygon_id or analysis_id in request body.'}), 400
+                return jsonify_with_cors({'error': 'Missing required polygon_id or analysis_id in request body.'}), 400
             
             # Retrieve the analysis record
             analysis_record = db_service.get_analysis_record(identifier)
             
             if analysis_record:
-                return jsonify(analysis_record), 200
+                return jsonify_with_cors(analysis_record), 200
             else:
                 # If no analysis record, check polygon status
                 polygon_metadata = db_service.get_polygon_metadata(identifier)
                 if polygon_metadata and polygon_metadata.get('status') in ['submitted', 'processing']:
-                     return jsonify({'status': 'processing', 'message': 'Analysis is still in progress.'}), 202
+                     return jsonify_with_cors({'status': 'processing', 'message': 'Analysis is still in progress.'}), 202
                 
-                return jsonify({'error': f'Analysis or polygon not found for ID: {identifier}'}), 404
+                return jsonify_with_cors({'error': f'Analysis or polygon not found for ID: {identifier}'}), 404
 
         except Exception as e:
             logger.error(f"Error accessing /api/analyses: {str(e)}", exc_info=True)
-            return jsonify({'error': 'Internal server error during analysis retrieval'}), 500
+            return jsonify_with_cors({'error': 'Internal server error during analysis retrieval'}), 500
