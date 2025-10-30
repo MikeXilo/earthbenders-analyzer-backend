@@ -65,6 +65,7 @@ def register_routes(app):
                         p.name as polygon_name,
                         p.status as polygon_status,
                         p.bounds as polygon_bounds,
+                        p.geometry as polygon_geometry,
                         p.geojson_path
                     FROM analyses a
                     LEFT JOIN polygons p ON a.polygon_id = p.id
@@ -92,15 +93,20 @@ def register_routes(app):
                     else:
                         logger.warning(f"No statistics found for project {row['polygon_id']}")
                     
-                    # Load polygon geometry from GeoJSON file
+                    # Load polygon geometry: prefer DB column, fallback to GeoJSON file
                     polygon_geometry = None
-                    if row['geojson_path']:
+                    if row.get('polygon_geometry'):
+                        try:
+                            polygon_geometry = json.loads(row['polygon_geometry']) if isinstance(row['polygon_geometry'], str) else row['polygon_geometry']
+                        except Exception as e:
+                            logger.warning(f"Could not parse polygon geometry from database for {row['polygon_id']}: {str(e)}")
+                            polygon_geometry = None
+                    if not polygon_geometry and row['geojson_path']:
                         try:
                             geojson_file_path = os.path.join('/app/data', row['geojson_path'])
                             if os.path.exists(geojson_file_path):
                                 with open(geojson_file_path, 'r') as f:
                                     geojson_data = json.load(f)
-                                    # Extract geometry from GeoJSON
                                     if geojson_data.get('type') == 'Feature':
                                         polygon_geometry = geojson_data.get('geometry')
                                     else:
