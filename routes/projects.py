@@ -122,16 +122,18 @@ def register_routes(app):
                         'drainage': row['drainage_path']
                     }
                     
-                    # Parse polygon bounds if available
+                    # Parse bounds with fallback to statistics.bounds if polygon bounds are missing
                     bounds = None
                     if row['polygon_bounds']:
                         try:
-                            if isinstance(row['polygon_bounds'], str):
-                                bounds = json.loads(row['polygon_bounds'])
-                            else:
-                                bounds = row['polygon_bounds']
+                            bounds = json.loads(row['polygon_bounds']) if isinstance(row['polygon_bounds'], str) else row['polygon_bounds']
                         except (json.JSONDecodeError, TypeError):
                             logger.warning(f"Could not parse bounds for project {row['polygon_id']}")
+                            bounds = None
+                    if not bounds and statistics and isinstance(statistics, dict):
+                        sb = statistics.get('bounds')
+                        if sb:
+                            bounds = sb
                     
                     project = {
                         'polygon_id': row['polygon_id'],
@@ -261,13 +263,17 @@ def register_routes(app):
                     except:
                         statistics = {}
                 
-                # Parse bounds
+                # Parse bounds with fallback to statistics.bounds
                 bounds = {}
                 if row['polygon_bounds']:
                     try:
                         bounds = json.loads(row['polygon_bounds']) if isinstance(row['polygon_bounds'], str) else row['polygon_bounds']
                     except:
                         bounds = {}
+                if (not bounds) and statistics and isinstance(statistics, dict):
+                    sb = statistics.get('bounds')
+                    if sb:
+                        bounds = sb
                 
                 # Build analysis files object
                 analysis_files = {
