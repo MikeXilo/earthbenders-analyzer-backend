@@ -240,12 +240,13 @@ def process_lidar_terrain():
         
         analysis_data = {
             'dem_path': results.get('clipped_dem_path'),
+            'slope_path': None,
+            'aspect_path': None,
             'bounds': results.get('bounds'),
-            'data_source': 'lidar'
+            'data_source': 'lidar',
+            # Save all calculated stats under the dedicated statistics field
+            'statistics': statistics
         }
-        
-        # Add statistics at root level (not nested)
-        analysis_data.update(statistics)
         
         save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)
         if save_result and save_result.get('status') == 'success':

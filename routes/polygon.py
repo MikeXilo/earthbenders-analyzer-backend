@@ -304,8 +304,8 @@ def register_routes(app):
                 'processed_at': datetime.now().isoformat()
             }
             
-            # Add statistics at root level (not nested)
-            analysis_data.update(statistics)
+            # Save statistics under the dedicated statistics field so partial stats persist immediately
+            analysis_data['statistics'] = statistics
             
             logger.info(f"Saving analysis results to database for polygon {polygon_id}")
             save_result = db_service.save_analysis_results(polygon_id, analysis_data, user_id)
