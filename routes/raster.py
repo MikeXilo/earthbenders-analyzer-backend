@@ -345,6 +345,15 @@ def register_routes(app):
                     'message': 'Missing required parameters: layers and bbox are required'
                 }), 400
             
+            # Check if bbox is still a placeholder (should be replaced by MapLibre)
+            # If it's still a placeholder, return an error
+            if '{bbox-epsg-3857}' in bbox or '{' in bbox:
+                logger.warning(f"Received bbox placeholder instead of actual values: {bbox}")
+                return jsonify_with_cors({
+                    'status': 'error',
+                    'message': 'Bbox placeholder not replaced. This is a MapLibre configuration issue.'
+                }), 400
+            
             # Construct WMS GetMap URL
             # Use proper URL encoding and handle WMS 1.1.1 vs 1.3.0 differences
             from urllib.parse import urlencode
