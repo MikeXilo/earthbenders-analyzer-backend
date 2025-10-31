@@ -366,6 +366,8 @@ def register_routes(app):
                     'format': format_type,
                     'srs': srs_param,
                     'transparent': transparent,
+                    # STYLES is REQUIRED for WMS 1.1.1 (even if empty string)
+                    'styles': styles if styles else '',  # Always include, empty string if not provided
                 }
             else:
                 # WMS 1.3.0
@@ -381,9 +383,9 @@ def register_routes(app):
                     'crs': crs,
                     'transparent': transparent,
                 }
-            
-            if styles:
-                wms_params['styles'] = styles
+                # For WMS 1.3.0, styles is optional but we include it if provided
+                if styles:
+                    wms_params['styles'] = styles
             
             # Build URL with proper encoding
             wms_url = f"{wms_base_url}?{urlencode(wms_params)}"
@@ -465,13 +467,43 @@ def register_routes(app):
                     }), 500
                 
                 # Verify it's actually an image (PNG signature: 89 50 4E 47)
-                if len(content) < 100 or not content.startswith(b'\x89PNG\r\n\x1a\n'):
-                    logger.warning(f"WMS returned suspicious response: {len(content)} bytes, starts with: {content[:20]}")
-                    # Try to decode as text to see error message
+                # Check for PNG signature more flexibly (some PNGs may have slight variations)
+                is_png = (len(content) >= 8 and 
+                         content[0] == 0x89 and 
+                         content[1:4] == b'PNG' and
+                         content[4:7] == b'\r\n\x1a\n')
+                
+                # Check if it's XML/HTML error (WMS typically returns XML errors)
+                is_xml_error = (content.startswith(b'<?xml') or 
+                               content.startswith(b'<html') or 
+                               content.startswith(b'<ServiceException') or
+                               b'ServiceException' in content[:200] or
+                               (content_type and ('xml' in content_type.lower() or 'html' in content_type.lower())))
+                
+                if is_xml_error:
+                    # Definitely an error - decode and log
                     try:
                         error_text = content.decode('utf-8', errors='ignore')[:500]
-                        if 'ServiceException' in error_text or 'error' in error_text.lower():
-                            logger.error(f"WMS error in response: {error_text}")
+                        logger.error(f"WMS returned XML/HTML error (Content-Type: {content_type}): {error_text}")
+                        return jsonify_with_cors({
+                            'status': 'error',
+                            'message': 'WMS service returned an error response'
+                        }), 500
+                    except:
+                        logger.error(f"WMS returned XML/HTML error (could not decode): {content[:200]}")
+                        return jsonify_with_cors({
+                            'status': 'error',
+                            'message': 'WMS service returned an error response'
+                        }), 500
+                
+                # If not PNG and very small, might be an error
+                if not is_png and len(content) < 500:
+                    logger.warning(f"WMS returned suspiciously small non-PNG response: {len(content)} bytes, starts with: {content[:50].hex()}")
+                    # Try to decode as text to see if it's an error message
+                    try:
+                        error_text = content.decode('utf-8', errors='ignore')[:500]
+                        if 'error' in error_text.lower() or 'exception' in error_text.lower():
+                            logger.error(f"WMS error in small response: {error_text}")
                             return jsonify_with_cors({
                                 'status': 'error',
                                 'message': 'WMS service returned an error'
@@ -479,13 +511,16 @@ def register_routes(app):
                     except:
                         pass
                     
-                    # If not a valid PNG and not XML, still might be error
-                    if len(content) < 1000:  # Suspiciously small
-                        logger.warning(f"Response too small to be valid image ({len(content)} bytes)")
+                    # If it's very small and not PNG, reject it
+                    if len(content) < 100:
+                        logger.error(f"Response too small to be valid ({len(content)} bytes)")
                         return jsonify_with_cors({
                             'status': 'error',
                             'message': f'WMS returned invalid response ({len(content)} bytes, expected image)'
                         }), 500
+                    # If between 100-500 bytes and not PNG, log warning but allow it
+                    # (might be a valid small transparent PNG or single-color image)
+                    logger.info(f"Small response ({len(content)} bytes) - not a standard PNG, but allowing it")
                 
                 # Create Flask response with image data
                 flask_response = Response(
