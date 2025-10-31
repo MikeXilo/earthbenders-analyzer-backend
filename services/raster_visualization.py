@@ -250,14 +250,27 @@ def detect_layer_type_from_path(file_path):
         str: Detected layer type or None if not found
     """
     import re
+    import os
+    
+    # Get just the filename for easier matching
+    filename = os.path.basename(file_path).lower()
+    
+    # Check for clipped_dem.tif or dem.tif first (these are elevation/SRTM files)
+    if 'clipped_dem.tif' in filename or filename == 'dem.tif':
+        return 'srtm'
     
     # Pattern to match layer types in filenames
     # e.g., '.../polygon_id_slope.tif' -> 'slope'
-    # e.g., '.../polygon_id_drainage_network.tif' -> 'drainage'
-    pattern = r'_(srtm|slope|aspect|hillshade|geomorphons|drainage_network|contours)\.tif'
+    # e.g., '.../polygon_id_drainage_network.tif' -> 'drainage_network'
+    # e.g., '.../polygon_id_srtm.tif' -> 'srtm'
+    pattern = r'_(srtm|slope|aspect|hillshade|geomorphons|drainage_network|contours|dem)\.tif'
     match = re.search(pattern, file_path)
     
     if match:
-        return match.group(1)
+        layer_type = match.group(1)
+        # Normalize 'dem' to 'srtm' since they're the same thing
+        if layer_type == 'dem':
+            return 'srtm'
+        return layer_type
     
     return None
