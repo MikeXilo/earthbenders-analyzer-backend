@@ -272,7 +272,9 @@ def test_route():
 @app.route('/', methods=['OPTIONS'])
 @app.route('/<path:path>', methods=['OPTIONS'])
 def options_handler(path=''):
-    return '', 204  # No content needed for OPTIONS response, status code 204
+    # Use jsonify_with_cors to ensure CORS headers are included
+    from utils.cors import jsonify_with_cors
+    return jsonify_with_cors({}), 204  # No content needed for OPTIONS response, status code 204
 
 if __name__ == '__main__':
     try:

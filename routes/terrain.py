@@ -549,6 +549,11 @@ def register_routes(app):
             logger.error(f"Error processing aspect: {str(e)}", exc_info=True)
             return jsonify_with_cors({'error': str(e)}), 500
 
+    @app.route('/process_drainage_network', methods=['OPTIONS'])
+    def process_drainage_network_options():
+        """Handle OPTIONS preflight request for CORS"""
+        return jsonify_with_cors({}), 200
+
     @app.route('/process_drainage_network', methods=['POST'])
     def process_drainage_network():
         try:
