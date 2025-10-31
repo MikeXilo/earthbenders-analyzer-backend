@@ -440,18 +440,51 @@ def register_routes(app):
                 
                 # Read response content
                 content = response.content
-                content_type = response.headers.get('Content-Type', format_type)
+                content_type = response.headers.get('Content-Type', '')
                 
-                # Verify it's actually an image (basic check)
-                if len(content) < 100:
-                    logger.warning(f"WMS returned suspiciously small response: {len(content)} bytes")
-                    # Might be an error message, check if it looks like XML/HTML
-                    if content.startswith(b'<?xml') or content.startswith(b'<html'):
-                        error_text = content.decode('utf-8', errors='ignore')[:200]
-                        logger.error(f"WMS returned XML/HTML error: {error_text}")
+                # Log response details for debugging
+                logger.info(f"WMS response: {len(content)} bytes, Content-Type: {content_type}")
+                
+                # Check if response is XML error instead of image
+                # WMS errors are typically XML even with 200 status code
+                if content_type and ('xml' in content_type.lower() or 'html' in content_type.lower()):
+                    error_text = content.decode('utf-8', errors='ignore')[:500]
+                    logger.error(f"WMS returned XML/HTML instead of image (Content-Type: {content_type}): {error_text}")
+                    return jsonify_with_cors({
+                        'status': 'error',
+                        'message': 'WMS service returned an error response (XML instead of image)'
+                    }), 500
+                
+                # Check if content looks like XML/HTML (common WMS error response)
+                if content.startswith(b'<?xml') or content.startswith(b'<html') or content.startswith(b'<ServiceException'):
+                    error_text = content.decode('utf-8', errors='ignore')[:500]
+                    logger.error(f"WMS returned XML/HTML error response: {error_text}")
+                    return jsonify_with_cors({
+                        'status': 'error',
+                        'message': 'WMS service returned an error response'
+                    }), 500
+                
+                # Verify it's actually an image (PNG signature: 89 50 4E 47)
+                if len(content) < 100 or not content.startswith(b'\x89PNG\r\n\x1a\n'):
+                    logger.warning(f"WMS returned suspicious response: {len(content)} bytes, starts with: {content[:20]}")
+                    # Try to decode as text to see error message
+                    try:
+                        error_text = content.decode('utf-8', errors='ignore')[:500]
+                        if 'ServiceException' in error_text or 'error' in error_text.lower():
+                            logger.error(f"WMS error in response: {error_text}")
+                            return jsonify_with_cors({
+                                'status': 'error',
+                                'message': 'WMS service returned an error'
+                            }), 500
+                    except:
+                        pass
+                    
+                    # If not a valid PNG and not XML, still might be error
+                    if len(content) < 1000:  # Suspiciously small
+                        logger.warning(f"Response too small to be valid image ({len(content)} bytes)")
                         return jsonify_with_cors({
                             'status': 'error',
-                            'message': 'WMS service returned an error response'
+                            'message': f'WMS returned invalid response ({len(content)} bytes, expected image)'
                         }), 500
                 
                 # Create Flask response with image data
