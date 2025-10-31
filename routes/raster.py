@@ -3,6 +3,7 @@ Routes for serving raster files
 """
 import os
 import logging
+import time
 import requests
 from flask import request, jsonify, send_file, abort, Response
 from utils.cors import jsonify_with_cors, add_cors_headers
@@ -299,16 +300,59 @@ def register_routes(app):
             
             logger.info(f"Proxying WMS request to: {wms_url}")
             
-            # Make request to WMS service with timeout
-            response = requests.get(wms_url, timeout=30, stream=True)
+            # Add retry logic with exponential backoff for connection errors
+            max_retries = 3
+            retry_delay = 0.5  # Start with 500ms
+            
+            session = requests.Session()
+            # Add proper headers to avoid being blocked
+            session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (compatible; Earthbenders/1.0)',
+                'Accept': 'image/png,image/*,*/*',
+                'Accept-Language': 'en-US,en;q=0.9',
+            })
+            
+            response = None
+            last_error = None
+            
+            for attempt in range(max_retries):
+                try:
+                    # Make request to WMS service with timeout
+                    response = session.get(wms_url, timeout=30, stream=True, allow_redirects=True)
+                    
+                    # If successful, break out of retry loop
+                    if response.status_code == 200:
+                        break
+                    
+                    # If it's a server error (5xx), retry
+                    if 500 <= response.status_code < 600 and attempt < max_retries - 1:
+                        logger.warning(f"WMS service returned {response.status_code}, retrying ({attempt + 1}/{max_retries})...")
+                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                        continue
+                    
+                    # If it's a client error (4xx), don't retry
+                    if 400 <= response.status_code < 500:
+                        logger.error(f"WMS service returned client error {response.status_code}")
+                        break
+                        
+                except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {str(e)}. Retrying...")
+                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                    else:
+                        logger.error(f"All {max_retries} attempts failed. Last error: {str(e)}")
+                        raise
             
             # Check if request was successful
-            if response.status_code != 200:
-                logger.error(f"WMS service returned status {response.status_code}")
+            if response is None or response.status_code != 200:
+                status_code = response.status_code if response else 500
+                error_msg = last_error if last_error else f'WMS service returned error: {status_code}'
+                logger.error(f"WMS request failed after {max_retries} attempts: {error_msg}")
                 return jsonify_with_cors({
                     'status': 'error',
-                    'message': f'WMS service returned error: {response.status_code}'
-                }), response.status_code
+                    'message': f'WMS service unavailable: {str(error_msg)[:100]}'
+                }), status_code if response else 503
             
             # Get content type from response
             content_type = response.headers.get('Content-Type', format_type)
