@@ -9,8 +9,58 @@ from flask import request, jsonify, send_file, abort, Response
 from utils.cors import jsonify_with_cors, add_cors_headers
 from werkzeug.utils import secure_filename
 from services.raster_visualization import process_raster_file, detect_layer_type_from_path
+from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
+import threading
+from collections import deque
 
 logger = logging.getLogger(__name__)
+
+# WMS proxy connection pool and throttling
+_wms_session_lock = threading.Lock()
+_wms_session = None
+_wms_request_queue = deque()
+_wms_max_concurrent = 2  # Limit concurrent WMS requests (reduced to avoid rate limiting)
+_wms_active_requests = 0
+_wms_queue_lock = threading.Lock()
+
+def get_wms_session():
+    """Get or create a shared WMS session with connection pooling"""
+    global _wms_session
+    with _wms_session_lock:
+        if _wms_session is None:
+            _wms_session = requests.Session()
+            
+            # Configure retry strategy
+            retry_strategy = Retry(
+                total=2,  # Total retries
+                backoff_factor=1.0,  # Wait 1s, 2s between retries
+                status_forcelist=[500, 502, 503, 504],
+                allowed_methods=["GET"],
+                raise_on_status=False
+            )
+            
+            # Configure adapter with connection pooling
+            adapter = HTTPAdapter(
+                max_retries=retry_strategy,
+                pool_connections=2,  # Number of connection pools
+                pool_maxsize=5,  # Max connections per pool
+                pool_block=False  # Don't block when pool is full
+            )
+            
+            _wms_session.mount("https://", adapter)
+            _wms_session.mount("http://", adapter)
+            
+            # Set headers
+            _wms_session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'image/png,image/*,*/*;q=0.8',
+                'Accept-Language': 'pt-PT,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Cache-Control': 'no-cache',
+            })
+    return _wms_session
 
 def register_routes(app):
     """
@@ -266,7 +316,10 @@ def register_routes(app):
         """
         Proxy WMS GetMap requests to bypass CORS restrictions
         This endpoint forwards WMS requests from the frontend to the WMS service
+        with connection pooling and throttling to avoid rate limiting
         """
+        global _wms_active_requests
+        
         try:
             # Get WMS parameters from query string
             service = request.args.get('service', 'WMS')
@@ -282,7 +335,8 @@ def register_routes(app):
             styles = request.args.get('styles', '')
             
             # Get the WMS base URL from query parameter or use default
-            wms_base_url = request.args.get('wms_url', 'https://mapas.dgterritorio.gov.pt/wms')
+            # Correct URL from GetCapabilities: https://geo2.dgterritorio.gov.pt/wms/COSc_preverao
+            wms_base_url = request.args.get('wms_url', 'https://geo2.dgterritorio.gov.pt/wms/COSc_preverao')
             
             # Validate required parameters
             if not layers or not bbox:
@@ -292,86 +346,134 @@ def register_routes(app):
                 }), 400
             
             # Construct WMS GetMap URL
-            wms_url = f"{wms_base_url}?service={service}&version={version}&request={request_type}"
-            wms_url += f"&layers={layers}&bbox={bbox}&width={width}&height={height}"
-            wms_url += f"&format={format_type}&crs={crs}&transparent={transparent}"
+            # Use proper URL encoding and handle WMS 1.1.1 vs 1.3.0 differences
+            from urllib.parse import urlencode
+            
+            # WMS 1.1.1 uses SRS, WMS 1.3.0 uses CRS
+            # For WMS 1.1.1, SRS should be in format "EPSG:XXXX" (most common) or just "EPSGXXXX"
+            if version == '1.1.1':
+                # Keep the full CRS format (EPSG:3857) for SRS in WMS 1.1.1
+                # Some services accept both "EPSG:3857" and "3857", but "EPSG:3857" is more standard
+                srs_param = crs if crs.startswith('EPSG:') else f'EPSG:{crs}' if not ':' in str(crs) else crs
+                wms_params = {
+                    'service': service,
+                    'version': version,
+                    'request': request_type,
+                    'layers': layers,
+                    'bbox': bbox,
+                    'width': width,
+                    'height': height,
+                    'format': format_type,
+                    'srs': srs_param,
+                    'transparent': transparent,
+                }
+            else:
+                # WMS 1.3.0
+                wms_params = {
+                    'service': service,
+                    'version': version,
+                    'request': request_type,
+                    'layers': layers,
+                    'bbox': bbox,
+                    'width': width,
+                    'height': height,
+                    'format': format_type,
+                    'crs': crs,
+                    'transparent': transparent,
+                }
+            
             if styles:
-                wms_url += f"&styles={styles}"
+                wms_params['styles'] = styles
             
-            logger.info(f"Proxying WMS request to: {wms_url}")
+            # Build URL with proper encoding
+            wms_url = f"{wms_base_url}?{urlencode(wms_params)}"
             
-            # Add retry logic with exponential backoff for connection errors
-            max_retries = 3
-            retry_delay = 0.5  # Start with 500ms
+            # Throttle requests to avoid overwhelming the WMS service
+            # Add a small delay between requests to avoid rate limiting
+            with _wms_queue_lock:
+                # Wait if we have too many concurrent requests
+                wait_attempts = 0
+                max_wait_attempts = 50  # Wait up to 5 seconds (50 * 0.1s)
+                while _wms_active_requests >= _wms_max_concurrent and wait_attempts < max_wait_attempts:
+                    _wms_queue_lock.release()
+                    time.sleep(0.1)  # Wait 100ms
+                    wait_attempts += 1
+                    _wms_queue_lock.acquire()
+                
+                if _wms_active_requests >= _wms_max_concurrent:
+                    logger.warning(f"WMS request queue full, rejecting request for {bbox}")
+                    return jsonify_with_cors({
+                        'status': 'error',
+                        'message': 'WMS service is busy, please try again in a moment'
+                    }), 503
+                
+                _wms_active_requests += 1
+                
+                # Add small delay between requests (50ms) to avoid rate limiting
+                # This mimics more human-like request patterns
+                if _wms_active_requests > 1:
+                    time.sleep(0.05)
             
-            session = requests.Session()
-            # Add proper headers to avoid being blocked
-            session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (compatible; Earthbenders/1.0)',
-                'Accept': 'image/png,image/*,*/*',
-                'Accept-Language': 'en-US,en;q=0.9',
-            })
-            
-            response = None
-            last_error = None
-            
-            for attempt in range(max_retries):
-                try:
-                    # Make request to WMS service with timeout
-                    response = session.get(wms_url, timeout=30, stream=True, allow_redirects=True)
-                    
-                    # If successful, break out of retry loop
-                    if response.status_code == 200:
-                        break
-                    
-                    # If it's a server error (5xx), retry
-                    if 500 <= response.status_code < 600 and attempt < max_retries - 1:
-                        logger.warning(f"WMS service returned {response.status_code}, retrying ({attempt + 1}/{max_retries})...")
-                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
-                        continue
-                    
-                    # If it's a client error (4xx), don't retry
-                    if 400 <= response.status_code < 500:
-                        logger.error(f"WMS service returned client error {response.status_code}")
-                        break
-                        
-                except (requests.exceptions.ConnectionError, requests.exceptions.RequestException) as e:
-                    last_error = e
-                    if attempt < max_retries - 1:
-                        logger.warning(f"Connection error on attempt {attempt + 1}/{max_retries}: {str(e)}. Retrying...")
-                        time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
-                    else:
-                        logger.error(f"All {max_retries} attempts failed. Last error: {str(e)}")
-                        raise
-            
-            # Check if request was successful
-            if response is None or response.status_code != 200:
-                status_code = response.status_code if response else 500
-                error_msg = last_error if last_error else f'WMS service returned error: {status_code}'
-                logger.error(f"WMS request failed after {max_retries} attempts: {error_msg}")
-                return jsonify_with_cors({
-                    'status': 'error',
-                    'message': f'WMS service unavailable: {str(error_msg)[:100]}'
-                }), status_code if response else 503
-            
-            # Get content type from response
-            content_type = response.headers.get('Content-Type', format_type)
-            
-            # Create Flask response with image data
-            flask_response = Response(
-                response.content,
-                mimetype=content_type,
-                status=200
-            )
-            
-            # Add CORS headers
-            flask_response = add_cors_headers(flask_response)
-            
-            # Add cache headers (cache WMS tiles for 1 hour)
-            flask_response.headers['Cache-Control'] = 'public, max-age=3600'
-            
-            logger.info(f"Successfully proxied WMS request, returning {len(response.content)} bytes")
-            return flask_response
+            try:
+                logger.info(f"Proxying WMS request (version {version}): {wms_url[:300]}...")
+                
+                # Get shared session with connection pooling
+                session = get_wms_session()
+                
+                # Make request with timeout and streaming
+                # Use a shorter timeout to fail fast if service is down
+                response = session.get(
+                    wms_url,
+                    timeout=(10, 30),  # 10s connect, 30s read timeout
+                    stream=True,
+                    allow_redirects=True
+                )
+                
+                # Check response status
+                if response.status_code != 200:
+                    error_text = response.text[:200] if hasattr(response, 'text') else ''
+                    logger.warning(f"WMS service returned {response.status_code}: {error_text}")
+                    return jsonify_with_cors({
+                        'status': 'error',
+                        'message': f'WMS service returned error: {response.status_code}'
+                    }), response.status_code
+                
+                # Read response content
+                content = response.content
+                content_type = response.headers.get('Content-Type', format_type)
+                
+                # Verify it's actually an image (basic check)
+                if len(content) < 100:
+                    logger.warning(f"WMS returned suspiciously small response: {len(content)} bytes")
+                    # Might be an error message, check if it looks like XML/HTML
+                    if content.startswith(b'<?xml') or content.startswith(b'<html'):
+                        error_text = content.decode('utf-8', errors='ignore')[:200]
+                        logger.error(f"WMS returned XML/HTML error: {error_text}")
+                        return jsonify_with_cors({
+                            'status': 'error',
+                            'message': 'WMS service returned an error response'
+                        }), 500
+                
+                # Create Flask response with image data
+                flask_response = Response(
+                    content,
+                    mimetype=content_type,
+                    status=200
+                )
+                
+                # Add CORS headers
+                flask_response = add_cors_headers(flask_response)
+                
+                # Add cache headers (cache WMS tiles for 1 hour)
+                flask_response.headers['Cache-Control'] = 'public, max-age=3600'
+                
+                logger.debug(f"Successfully proxied WMS request, returning {len(content)} bytes")
+                return flask_response
+                
+            finally:
+                # Always decrement active request counter
+                with _wms_queue_lock:
+                    _wms_active_requests = max(0, _wms_active_requests - 1)
             
         except requests.exceptions.Timeout:
             logger.error("WMS request timed out")
@@ -379,15 +481,28 @@ def register_routes(app):
                 'status': 'error',
                 'message': 'WMS request timed out'
             }), 504
+        except requests.exceptions.ConnectionError as e:
+            logger.error(f"WMS connection error: {str(e)}")
+            return jsonify_with_cors({
+                'status': 'error',
+                'message': 'WMS service connection failed. The service may be temporarily unavailable.'
+            }), 503
         except requests.exceptions.RequestException as e:
             logger.error(f"Error proxying WMS request: {str(e)}")
             return jsonify_with_cors({
                 'status': 'error',
-                'message': f'Failed to proxy WMS request: {str(e)}'
+                'message': f'Failed to proxy WMS request: {str(e)[:100]}'
             }), 500
         except Exception as e:
-            logger.error(f"Unexpected error in WMS proxy: {str(e)}")
+            logger.error(f"Unexpected error in WMS proxy: {str(e)}", exc_info=True)
             return jsonify_with_cors({
                 'status': 'error',
-                'message': f'Internal server error: {str(e)}'
+                'message': f'Internal server error: {str(e)[:100]}'
             }), 500
+        finally:
+            # Ensure we always decrement the counter even on unexpected errors
+            try:
+                with _wms_queue_lock:
+                    _wms_active_requests = max(0, _wms_active_requests - 1)
+            except:
+                pass
