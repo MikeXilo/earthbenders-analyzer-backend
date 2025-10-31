@@ -3,8 +3,9 @@ Routes for serving raster files
 """
 import os
 import logging
-from flask import request, jsonify, send_file, abort
-from utils.cors import jsonify_with_cors
+import requests
+from flask import request, jsonify, send_file, abort, Response
+from utils.cors import jsonify_with_cors, add_cors_headers
 from werkzeug.utils import secure_filename
 from services.raster_visualization import process_raster_file, detect_layer_type_from_path
 
@@ -253,3 +254,96 @@ def register_routes(app):
         except Exception as e:
             logger.error(f"Error in visualize_raster: {str(e)}")
             return jsonify_with_cors({'error': f'Internal server error: {str(e)}'}), 500
+
+    @app.route('/api/wms-proxy', methods=['OPTIONS'])
+    def wms_proxy_options():
+        """Handle CORS preflight requests for WMS proxy"""
+        return jsonify_with_cors({}), 200
+
+    @app.route('/api/wms-proxy', methods=['GET'])
+    def wms_proxy():
+        """
+        Proxy WMS GetMap requests to bypass CORS restrictions
+        This endpoint forwards WMS requests from the frontend to the WMS service
+        """
+        try:
+            # Get WMS parameters from query string
+            service = request.args.get('service', 'WMS')
+            version = request.args.get('version', '1.3.0')
+            request_type = request.args.get('request', 'GetMap')
+            layers = request.args.get('layers')
+            bbox = request.args.get('bbox')
+            width = request.args.get('width', '256')
+            height = request.args.get('height', '256')
+            format_type = request.args.get('format', 'image/png')
+            crs = request.args.get('crs', 'EPSG:3857')
+            transparent = request.args.get('transparent', 'true')
+            styles = request.args.get('styles', '')
+            
+            # Get the WMS base URL from query parameter or use default
+            wms_base_url = request.args.get('wms_url', 'https://mapas.dgterritorio.gov.pt/wms')
+            
+            # Validate required parameters
+            if not layers or not bbox:
+                return jsonify_with_cors({
+                    'status': 'error',
+                    'message': 'Missing required parameters: layers and bbox are required'
+                }), 400
+            
+            # Construct WMS GetMap URL
+            wms_url = f"{wms_base_url}?service={service}&version={version}&request={request_type}"
+            wms_url += f"&layers={layers}&bbox={bbox}&width={width}&height={height}"
+            wms_url += f"&format={format_type}&crs={crs}&transparent={transparent}"
+            if styles:
+                wms_url += f"&styles={styles}"
+            
+            logger.info(f"Proxying WMS request to: {wms_url}")
+            
+            # Make request to WMS service with timeout
+            response = requests.get(wms_url, timeout=30, stream=True)
+            
+            # Check if request was successful
+            if response.status_code != 200:
+                logger.error(f"WMS service returned status {response.status_code}")
+                return jsonify_with_cors({
+                    'status': 'error',
+                    'message': f'WMS service returned error: {response.status_code}'
+                }), response.status_code
+            
+            # Get content type from response
+            content_type = response.headers.get('Content-Type', format_type)
+            
+            # Create Flask response with image data
+            flask_response = Response(
+                response.content,
+                mimetype=content_type,
+                status=200
+            )
+            
+            # Add CORS headers
+            flask_response = add_cors_headers(flask_response)
+            
+            # Add cache headers (cache WMS tiles for 1 hour)
+            flask_response.headers['Cache-Control'] = 'public, max-age=3600'
+            
+            logger.info(f"Successfully proxied WMS request, returning {len(response.content)} bytes")
+            return flask_response
+            
+        except requests.exceptions.Timeout:
+            logger.error("WMS request timed out")
+            return jsonify_with_cors({
+                'status': 'error',
+                'message': 'WMS request timed out'
+            }), 504
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Error proxying WMS request: {str(e)}")
+            return jsonify_with_cors({
+                'status': 'error',
+                'message': f'Failed to proxy WMS request: {str(e)}'
+            }), 500
+        except Exception as e:
+            logger.error(f"Unexpected error in WMS proxy: {str(e)}")
+            return jsonify_with_cors({
+                'status': 'error',
+                'message': f'Internal server error: {str(e)}'
+            }), 500
