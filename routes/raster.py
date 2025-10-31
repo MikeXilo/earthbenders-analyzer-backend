@@ -397,7 +397,9 @@ def register_routes(app):
                     wms_params['styles'] = styles
             
             # Build URL with proper encoding
-            wms_url = f"{wms_base_url}?{urlencode(wms_params)}"
+            # Check if wms_base_url already has query parameters
+            separator = '&' if '?' in wms_base_url else '?'
+            wms_url = f"{wms_base_url}{separator}{urlencode(wms_params)}"
             
             # Throttle requests to avoid overwhelming the WMS service
             # Add a small delay between requests to avoid rate limiting
