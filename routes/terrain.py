@@ -129,6 +129,11 @@ def register_routes(app):
             logger.error(f"Error processing slopes: {str(e)}", exc_info=True)
             return jsonify_with_cors({'error': str(e)}), 500
 
+    @app.route('/generate_contours', methods=['OPTIONS'])
+    def generate_contours_options():
+        """Handle OPTIONS preflight request for CORS"""
+        return jsonify_with_cors({}), 200
+
     @app.route('/generate_contours', methods=['POST'])
     def generate_contours_route():
         try:

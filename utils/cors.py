@@ -1,7 +1,7 @@
 """
 CORS utility functions to simplify adding CORS headers to Flask responses
 """
-from flask import jsonify
+from flask import jsonify, make_response
 
 def add_cors_headers(response):
     """
@@ -26,6 +26,14 @@ def jsonify_with_cors(*args, **kwargs):
     Usage:
         return jsonify_with_cors({'status': 'success', 'data': ...})
         return jsonify_with_cors({'error': 'Not found'}, 404)
+        
+    If you need to return with a status code, use make_response:
+        response = jsonify_with_cors({'error': 'Not found'})
+        response.status_code = 404
+        return response
+    
+    Or simply return the tuple (Flask will handle it):
+        return jsonify_with_cors({'error': 'Not found'}), 404
     """
     response = jsonify(*args, **kwargs)
     return add_cors_headers(response)
