@@ -186,10 +186,39 @@ def register_routes(app):
                 with open(contour_file, 'r') as f:
                     contour_data = json.load(f)
                 
+                # Save contour analysis results to database
+                from services.database import DatabaseService
+                db_service = DatabaseService()
+                
+                # Update the analyses table with contour path
+                # Convert absolute path to relative path for database storage
+                relative_contour_path = os.path.relpath(contour_file, SAVE_DIRECTORY)
+                contour_analysis_data = {
+                    'contour_path': relative_contour_path,
+                    'processed_at': datetime.now().isoformat()
+                }
+                
+                # Update existing analysis record with contour path
+                update_result = db_service.update_analysis_paths(polygon_id, contour_analysis_data)
+                if update_result.get('status') != 'success':
+                    logger.warning(f"Failed to update analysis paths: {update_result.get('message', 'Unknown error')}")
+                
+                # Save contour file metadata to database
+                contour_file_result = db_service.save_file_metadata(
+                    polygon_id=polygon_id,
+                    file_name=f"{polygon_id}_contours.geojson",
+                    file_path=relative_contour_path,
+                    file_type='contours'
+                )
+                
+                if contour_file_result.get('status') != 'success':
+                    logger.warning(f"Failed to save contour file metadata: {contour_file_result.get('message', 'Unknown error')}")
+                
                 return jsonify_with_cors({
                     'message': 'Contours generated successfully',
                     'polygon_id': polygon_id,
                     'contour_file': contour_file,
+                    'contour_path': relative_contour_path,  # Return relative path for consistency
                     'contours': contour_data,
                     'interval': interval
                 })
